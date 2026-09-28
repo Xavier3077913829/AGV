@@ -4,12 +4,13 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import AGV, DispatchRecord, MapEdge, MapNode, ScheduleRun, TransportTask
+from .models import AGV, DispatchRecord, MapEdge, MapNode, MapObstacle, ScheduleRun, TransportTask
 from .serializers import (
     AGVSerializer,
     DispatchRecordSerializer,
     MapEdgeSerializer,
     MapNodeSerializer,
+    MapObstacleSerializer,
     ScheduleRunSerializer,
     TransportTaskSerializer,
 )
@@ -19,6 +20,7 @@ from .services import (
     complete_task,
     dispatch_batch,
     dispatch_single_sequence,
+    plan_shortest_path,
     start_task,
 )
 
@@ -33,6 +35,12 @@ class MapEdgeViewSet(viewsets.ModelViewSet):
     queryset = MapEdge.objects.select_related("start_node", "end_node").all()
     serializer_class = MapEdgeSerializer
     filterset_fields = ["is_active", "bidirectional"]
+
+
+class MapObstacleViewSet(viewsets.ModelViewSet):
+    queryset = MapObstacle.objects.all()
+    serializer_class = MapObstacleSerializer
+    filterset_fields = ["is_active"]
 
 class AGVViewSet(viewsets.ModelViewSet):
     serializer_class = AGVSerializer
@@ -173,9 +181,30 @@ class MapDataView(APIView):
             "edges": MapEdgeSerializer(
                 MapEdge.objects.select_related("start_node", "end_node"), many=True
             ).data,
+            "obstacles": MapObstacleSerializer(
+                MapObstacle.objects.filter(is_active=True), many=True
+            ).data,
             "agvs": AGVSerializer(AGV.objects.select_related("current_node"), many=True).data,
             "active_routes": routes,
         })
+
+class PathPlanningView(APIView):
+    def post(self, request):
+        start_node_id = request.data.get("start_node_id")
+        end_node_id = request.data.get("end_node_id")
+        if not start_node_id or not end_node_id:
+            return Response({"detail": "start_node_id 和 end_node_id 为必填项。"}, status=400)
+        try:
+            result = plan_shortest_path(
+                int(start_node_id),
+                int(end_node_id),
+                int(request.data["agv_id"]) if request.data.get("agv_id") else None,
+            )
+        except (TypeError, ValueError):
+            return Response({"detail": "节点或 AGV 参数格式错误。"}, status=400)
+        except SchedulingError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return Response(result)
 
 class SingleScheduleView(APIView):
     def post(self, request):

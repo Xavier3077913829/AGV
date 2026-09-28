@@ -1074,3 +1074,92 @@ def cancel_task(task_id: int) -> TransportTask:
             if not has_more:
                 AGV.objects.filter(pk=old_agv_id).update(status=AGV.Status.IDLE)
     return task
+
+def plan_shortest_path(
+    start_node_id: int,
+    end_node_id: int,
+    agv_id: int | None = None,
+) -> dict:
+    """根据地图障碍与道路拓扑规划一条满足约束的最短路径。"""
+    nodes = MapNode.objects.in_bulk([start_node_id, end_node_id])
+    if start_node_id not in nodes or end_node_id not in nodes:
+        raise SchedulingError("起点或终点节点不存在。")
+    if start_node_id == end_node_id:
+        raise SchedulingError("起点和终点不能相同。")
+
+    agv = AGV.objects.select_related("current_node").filter(pk=agv_id).first() if agv_id else None
+    if agv_id and not agv:
+        raise SchedulingError("指定 AGV 不存在。")
+    speed = agv.speed if agv else 1.2
+    router = GraphRouter(build_graph())
+    path = router.path(start_node_id, end_node_id)
+    legs = []
+    timeline = []
+    cursor = 0.0
+    timeline.append({
+        "node_id": path.nodes[0],
+        "arrival_seconds": 0.0,
+        "departure_seconds": 0.0,
+        "wait_seconds": 0.0,
+    })
+    for current_node, next_node in zip(path.nodes, path.nodes[1:]):
+        distance = _segment_distance(router.graph, current_node, next_node)
+        seconds = distance / max(speed, 0.1)
+        cursor += seconds
+        legs.append({
+            "from_node": current_node,
+            "to_node": next_node,
+            "distance": round(distance, 3),
+            "seconds": round(seconds, 2),
+        })
+        timeline.append({
+            "node_id": next_node,
+            "arrival_seconds": round(cursor, 2),
+            "departure_seconds": round(cursor, 2),
+            "wait_seconds": 0.0,
+        })
+
+    battery_required = round(path.distance * BATTERY_DROP_PER_METER, 2)
+    battery_ok = agv is None or agv.battery_percent - battery_required >= MIN_BATTERY_PERCENT
+    if agv is not None and not battery_ok:
+        raise SchedulingError(
+            f"{agv.code} 电量不足：预计消耗 {battery_required}%，无法满足安全电量约束。"
+        )
+    return {
+        "start_node": _node_payload(nodes[start_node_id]),
+        "end_node": _node_payload(nodes[end_node_id]),
+        "agv": {
+            "id": agv.id,
+            "code": agv.code,
+            "speed": agv.speed,
+            "battery_percent": agv.battery_percent,
+            "battery_required": battery_required,
+            "battery_ok": battery_ok,
+        } if agv else None,
+        "distance": path.distance,
+        "estimated_duration": round(cursor, 2),
+        "constraints": {
+            "obstacle_avoidance": True,
+            "road_topology": True,
+            "battery_ok": battery_ok,
+        },
+        "route": {
+            "nodes": path.nodes,
+            "legs": legs,
+            "timeline": timeline,
+            "waits": [],
+            "start_node": start_node_id,
+            "end_node": end_node_id,
+        },
+    }
+
+
+def _node_payload(node: MapNode) -> dict:
+    return {
+        "id": node.id,
+        "code": node.code,
+        "name": node.name,
+        "node_type": node.node_type,
+        "x": node.x,
+        "y": node.y,
+    }

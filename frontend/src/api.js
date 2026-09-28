@@ -9,7 +9,14 @@ async function request(path, options = {}) {
     ...options,
   })
   const text = await response.text()
-  const data = text ? JSON.parse(text) : null
+  let data = null
+  if (text) {
+    try {
+      data = JSON.parse(text)
+    } catch {
+      data = { detail: text.slice(0, 180) }
+    }
+  }
   if (!response.ok) {
     throw new Error(data?.detail || data?.message || `请求失败 (${response.status})`)
   }
@@ -34,5 +41,6 @@ export const api = {
   updateAgv: (id, payload) => request(`/agvs/${id}/`, { method: 'PATCH', body: JSON.stringify(payload) }),
   singleDispatch: (payload) => request('/schedules/single/', { method: 'POST', body: JSON.stringify(payload) }),
   batchDispatch: (payload) => request('/schedules/batch/', { method: 'POST', body: JSON.stringify(payload) }),
+  planPath: (payload) => request('/path-planning/', { method: 'POST', body: JSON.stringify(payload) }),
   taskAction: (id, action) => request(`/tasks/${id}/${action}/`, { method: 'POST', body: '{}' }),
 }

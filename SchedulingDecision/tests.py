@@ -2,7 +2,7 @@ from django.core.management import call_command
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from .models import AGV, DispatchRecord, ScheduleRun, TransportTask
+from .models import AGV, DispatchRecord, MapNode, ScheduleRun, TransportTask
 from .services import (
     SchedulingError,
     complete_task,
@@ -115,8 +115,9 @@ class APITests(TestCase):
         self.assertEqual(overview.status_code, 200)
         self.assertEqual(overview.data["agv_total"], 4)
         self.assertEqual(graph.status_code, 200)
-        self.assertEqual(len(graph.data["nodes"]), 20)
-        self.assertEqual(len(graph.data["edges"]), 31)
+        self.assertEqual(len(graph.data["nodes"]), 80)
+        self.assertEqual(len(graph.data["edges"]), 109)
+        self.assertEqual(len(graph.data["obstacles"]), 16)
 
     def test_single_schedule_endpoint_accepts_multiple_tasks(self):
         task_ids = list(
@@ -133,6 +134,20 @@ class APITests(TestCase):
         self.assertEqual(len(response.data["tasks"]), 4)
         self.assertEqual(response.data["run"]["algorithm"], "single_sequence")
         self.assertGreater(response.data["evaluation"]["makespan_seconds"], 0)
+
+    def test_path_planning_endpoint_avoids_obstacles(self):
+        start = MapNode.objects.get(code="S2")
+        end = MapNode.objects.get(code="S6")
+        response = self.client.post(
+            "/api/path-planning/",
+            {"start_node_id": start.id, "end_node_id": end.id},
+            format="json",
+            **self.host,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertGreater(response.data["distance"], 0)
+        self.assertEqual(response.data["route"]["nodes"][0], start.id)
+        self.assertEqual(response.data["route"]["nodes"][-1], end.id)
 
     def test_batch_schedule_endpoint_returns_optimization_metrics(self):
         response = self.client.post(

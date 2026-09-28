@@ -2,7 +2,7 @@ from time import time
 
 from rest_framework import serializers
 
-from .models import AGV, DispatchRecord, MapEdge, MapNode, ScheduleRun, TransportTask
+from .models import AGV, DispatchRecord, MapEdge, MapNode, MapObstacle, ScheduleRun, TransportTask
 
 
 class MapNodeSerializer(serializers.ModelSerializer):
@@ -16,6 +16,12 @@ class MapNodeSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["created_at"]
 
+
+class MapObstacleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MapObstacle
+        fields = ["id", "code", "name", "x", "y", "width", "height", "is_active", "created_at"]
+        read_only_fields = ["created_at"]
 
 class MapEdgeSerializer(serializers.ModelSerializer):
     start_node_detail = MapNodeSerializer(source="start_node", read_only=True)
