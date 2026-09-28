@@ -318,3 +318,25 @@ tr:hover td { background: rgba(75, 140, 255, 0.035); }
 .planner-metrics span { color: var(--muted); font-size: 10px; }
 .planner-metrics strong { color: white; font-size: 14px; }
 .planner-endpoints { pointer-events: none; }
+
+
+.map-grid-line { stroke: rgba(91, 128, 162, 0.24); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.map-edge { vector-effect: non-scaling-stroke; }
+.map-node-hit { fill: transparent; cursor: help; }
+.map-node-group:hover .map-node { stroke: #ffffff; stroke-width: 3; }
+.map-node-tooltip rect { fill: rgba(5, 15, 28, 0.96); stroke: rgba(35, 213, 230, 0.65); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.map-node-tooltip text { fill: #eaf8ff; font-size: 11px; font-weight: 650; }
+
+.route-selected { stroke-width: 9 !important; filter: drop-shadow(0 0 8px currentColor); }
+.executing-routes { border-top: 1px solid var(--line); padding-top: 14px; }
+.route-section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; font-size: 12px; }
+.route-section-head span { color: var(--muted); }
+.executing-routes .route-list { max-height: 260px; }
+.small-empty { padding: 18px 10px; }
+
+.route-full-path { margin-top: 9px; padding-top: 9px; border-top: 1px dashed var(--line); display: grid; gap: 5px; }
+.route-full-path span { color: var(--muted); font-size: 10px; }
+.route-full-path code { color: #9fe7ee; font-size: 10px; line-height: 1.65; white-space: normal; word-break: break-all; max-height: none; overflow: visible; }
+
+.route-pagination { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.route-pagination span { color: var(--muted); font-size: 11px; }

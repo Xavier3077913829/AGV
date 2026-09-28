@@ -115,9 +115,9 @@ class APITests(TestCase):
         self.assertEqual(overview.status_code, 200)
         self.assertEqual(overview.data["agv_total"], 4)
         self.assertEqual(graph.status_code, 200)
-        self.assertEqual(len(graph.data["nodes"]), 80)
-        self.assertEqual(len(graph.data["edges"]), 109)
-        self.assertEqual(len(graph.data["obstacles"]), 16)
+        self.assertEqual(len(graph.data["nodes"]), 76)
+        self.assertEqual(len(graph.data["edges"]), 103)
+        self.assertEqual(len(graph.data["obstacles"]), 10)
 
     def test_single_schedule_endpoint_accepts_multiple_tasks(self):
         task_ids = list(

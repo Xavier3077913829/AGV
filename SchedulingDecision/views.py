@@ -171,6 +171,8 @@ class MapDataView(APIView):
                 "route": task.route,
                 "pickup_node": task.pickup_node_id,
                 "dropoff_node": task.dropoff_node_id,
+                "total_distance": task.total_distance,
+                "estimated_duration": task.estimated_duration,
                 "scheduled_start": task.scheduled_start,
                 "scheduled_end": task.scheduled_end,
             }
