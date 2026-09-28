@@ -61,6 +61,26 @@ class MapEdge(models.Model):
     def __str__(self):
         return f"{self.start_node.code} -> {self.end_node.code} ({self.distance}m)"
 
+class MapObstacle(models.Model):
+    """地图中的不可通行障碍区域。"""
+
+    code = models.CharField("障碍物编码", max_length=32, unique=True)
+    name = models.CharField("障碍物名称", max_length=64, blank=True)
+    x = models.FloatField("X 坐标")
+    y = models.FloatField("Y 坐标")
+    width = models.FloatField("宽度", default=1)
+    height = models.FloatField("高度", default=1)
+    is_active = models.BooleanField("启用", default=True)
+    created_at = models.DateTimeField("创建时间", auto_now_add=True)
+
+    class Meta:
+        ordering = ["code"]
+        verbose_name = "地图障碍物"
+        verbose_name_plural = "地图障碍物"
+
+    def __str__(self):
+        return f"{self.code} ({self.x}, {self.y})"
+
 class AGV(models.Model):
     class Status(models.TextChoices):
         IDLE = "idle", "空闲"

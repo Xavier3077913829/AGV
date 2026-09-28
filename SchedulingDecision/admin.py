@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import AGV, DispatchRecord, MapEdge, MapNode, ScheduleRun, TransportTask
+from .models import AGV, DispatchRecord, MapEdge, MapNode, MapObstacle, ScheduleRun, TransportTask
 
 
 @admin.register(MapNode)
@@ -46,3 +46,9 @@ class ScheduleRunAdmin(admin.ModelAdmin):
     )
     list_filter = ("algorithm",)
     readonly_fields = ("batch_id", "created_at", "metrics", "assignments")
+
+@admin.register(MapObstacle)
+class MapObstacleAdmin(admin.ModelAdmin):
+    list_display = ("code", "name", "x", "y", "width", "height", "is_active")
+    list_filter = ("is_active",)
+    search_fields = ("code", "name")

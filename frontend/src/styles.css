@@ -305,3 +305,16 @@ tr:hover td { background: rgba(75, 140, 255, 0.035); }
   overflow: hidden; white-space: nowrap; box-shadow: 0 0 12px rgba(35, 213, 230, 0.2);
 }
 .gantt-end { color: var(--muted); font-size: 11px; text-align: right; }
+
+
+.map-layout-wide { grid-template-columns: minmax(0, 1fr) 330px; }
+.warehouse-map { background-size: 28px 28px, 28px 28px, auto, auto; }
+.map-obstacle { fill: #17202a; stroke: #596575; stroke-width: 2; filter: drop-shadow(0 3px 2px rgba(0,0,0,0.45)); }
+.manual-route { stroke: #ff6372; color: #ff6372; stroke-width: 7; stroke-dasharray: 13 8; }
+.path-planner { display: grid; gap: 11px; }
+.planner-result { padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,0.025); }
+.planner-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.planner-metrics > div { display: flex; flex-direction: column; gap: 4px; }
+.planner-metrics span { color: var(--muted); font-size: 10px; }
+.planner-metrics strong { color: white; font-size: 14px; }
+.planner-endpoints { pointer-events: none; }

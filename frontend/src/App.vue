@@ -102,7 +102,7 @@ onUnmounted(() => {
 
       <DashboardView v-if="activeTab === 'dashboard'" :overview="overview" :agvs="agvs" :tasks="tasks" :dispatches="dispatches" />
       <DispatchView v-else-if="activeTab === 'dispatch'" :tasks="tasks" :agvs="agvs" :nodes="mapData.nodes || []" @refresh="loadAll(true)" @notify="handleNotify" />
-      <MapView v-else-if="activeTab === 'map'" :map-data="mapData" />
+      <MapView v-else-if="activeTab === 'map'" :map-data="mapData" @notify="handleNotify" />
       <TaskView v-else-if="activeTab === 'tasks'" :tasks="tasks" :nodes="mapData.nodes || []" @refresh="loadAll(true)" @notify="handleNotify" />
       <AgvView v-else :agvs="agvs" @refresh="loadAll(true)" @notify="handleNotify" />
     </main>
