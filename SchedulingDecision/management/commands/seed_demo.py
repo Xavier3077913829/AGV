@@ -1,0 +1,200 @@
+from django.contrib.auth import get_user_model
+from django.core.management.base import BaseCommand
+from django.db import transaction
+
+from SchedulingDecision.models import (
+    AGV,
+    DispatchRecord,
+    MapEdge,
+    MapNode,
+    MapObstacle,
+    ScheduleRun,
+    TransportTask,
+)
+
+
+GRID_COLS = 12
+GRID_ROWS = 8
+CELL_SIZE = 4.0
+
+OBSTACLES = [
+    ("O01", "障碍区 01", 1, 1, 2, 1),
+    ("O02", "障碍区 02", 4, 0, 1, 2),
+    ("O03", "障碍区 03", 7, 1, 2, 1),
+    ("O04", "障碍区 04", 10, 1, 1, 2),
+    ("O05", "障碍区 05", 2, 3, 2, 1),
+    ("O06", "障碍区 06", 5, 3, 1, 2),
+    ("O07", "障碍区 07", 8, 3, 2, 1),
+    ("O08", "障碍区 08", 1, 5, 2, 1),
+    ("O09", "障碍区 09", 4, 6, 2, 1),
+    ("O10", "障碍区 10", 8, 6, 2, 1),
+]
+
+STATIONS = {
+    "CHARGE": {"name": "充电区", "node_type": "charging", "x": 0, "y": 0},
+    "S1": {"name": "工作站 S1", "node_type": "dropoff", "x": 11, "y": 3},
+    "S2": {"name": "工作站 S2", "node_type": "pickup", "x": 6, "y": 1},
+    "S3": {"name": "工作站 S3", "node_type": "pickup", "x": 8, "y": 0},
+    "S4": {"name": "工作站 S4", "node_type": "pickup", "x": 4, "y": 2},
+    "S5": {"name": "工作站 S5", "node_type": "pickup", "x": 7, "y": 2},
+    "S6": {"name": "工作站 S6", "node_type": "dropoff", "x": 4, "y": 4},
+    "S7": {"name": "工作站 S7", "node_type": "dropoff", "x": 6, "y": 4},
+    "S8": {"name": "工作站 S8", "node_type": "dropoff", "x": 9, "y": 4},
+    "S9": {"name": "工作站 S9", "node_type": "dropoff", "x": 1, "y": 6},
+    "S10": {"name": "工作站 S10", "node_type": "pickup", "x": 2, "y": 7},
+    "HOME1": {"name": "停车区 1", "node_type": "parking", "x": 11, "y": 7},
+    "HOME2": {"name": "停车区 2", "node_type": "parking", "x": 0, "y": 7},
+    "HOME3": {"name": "停车区 3", "node_type": "parking", "x": 11, "y": 0},
+}
+
+
+class Command(BaseCommand):
+    help = "初始化 AGV 调度演示数据（障碍地图、AGV、任务和管理员）"
+
+    def add_arguments(self, parser):
+        parser.add_argument("--reset", action="store_true", help="清空业务数据后重新初始化")
+
+    @transaction.atomic
+    def handle(self, *args, **options):
+        if options["reset"]:
+            DispatchRecord.objects.all().delete()
+            TransportTask.objects.all().delete()
+            ScheduleRun.objects.all().delete()
+            AGV.objects.all().delete()
+            MapEdge.objects.all().delete()
+            MapObstacle.objects.all().delete()
+            MapNode.objects.all().delete()
+
+        blocked = set()
+        for _code, _name, x, y, width, height in OBSTACLES:
+            for col in range(int(x), int(x + width)):
+                for row in range(int(y), int(y + height)):
+                    blocked.add((col, row))
+            MapObstacle.objects.update_or_create(
+                code=_code,
+                defaults={
+                    "name": _name,
+                    "x": x,
+                    "y": y,
+                    "width": width,
+                    "height": height,
+                    "is_active": True,
+                },
+            )
+
+        station_by_position = {
+            (item["x"], item["y"]): (code, item)
+            for code, item in STATIONS.items()
+        }
+        node_map = {}
+        for col in range(GRID_COLS):
+            for row in range(GRID_ROWS):
+                if (col, row) in blocked:
+                    continue
+                station = station_by_position.get((col, row))
+                if station:
+                    code, item = station
+                    name = item["name"]
+                    node_type = item["node_type"]
+                else:
+                    code = f"G{col:02d}{row:02d}"
+                    name = f"路径节点 {col}-{row}"
+                    node_type = MapNode.NodeType.INTERSECTION
+                node, _ = MapNode.objects.update_or_create(
+                    code=code,
+                    defaults={
+                        "name": name,
+                        "node_type": node_type,
+                        "x": col,
+                        "y": row,
+                        "is_active": True,
+                    },
+                )
+                node_map[(col, row)] = node
+
+        for (col, row), node in node_map.items():
+            for next_col, next_row in ((col + 1, row), (col, row + 1)):
+                next_node = node_map.get((next_col, next_row))
+                if next_node is None:
+                    continue
+                MapEdge.objects.update_or_create(
+                    start_node=node,
+                    end_node=next_node,
+                    defaults={
+                        "distance": CELL_SIZE,
+                        "speed_limit": 1.2,
+                        "bidirectional": True,
+                        "is_active": True,
+                    },
+                )
+
+        def station_node(code):
+            item = STATIONS[code]
+            return node_map[(item["x"], item["y"])]
+
+        agv_specs = [
+            ("AGV-01", "天马一号", "T1-100", "CHARGE", 96, 120, 1.2),
+            ("AGV-02", "天马二号", "T1-100", "S2", 88, 120, 1.1),
+            ("AGV-03", "天马三号", "T2-150", "S3", 73, 150, 1.4),
+            ("AGV-04", "天马四号", "T2-150", "S10", 64, 150, 1.35),
+        ]
+        for code, name, model_name, node_code, battery, capacity, speed in agv_specs:
+            AGV.objects.update_or_create(
+                code=code,
+                defaults={
+                    "name": name,
+                    "model_name": model_name,
+                    "current_node": station_node(node_code),
+                    "battery_percent": battery,
+                    "payload_capacity": capacity,
+                    "speed": speed,
+                    "status": AGV.Status.IDLE,
+                },
+            )
+
+        task_specs = [
+            ("TASK-DEMO-001", "S2", "S6", "电子元件箱", 35, 3),
+            ("TASK-DEMO-002", "S3", "S8", "汽车零部件", 70, 4),
+            ("TASK-DEMO-003", "S10", "S1", "成品包装箱", 45, 2),
+            ("TASK-DEMO-004", "S4", "S7", "原料托盘", 95, 3),
+            ("TASK-DEMO-005", "S5", "S9", "质检样品", 18, 1),
+            ("TASK-DEMO-006", "S9", "S1", "装配工装", 60, 2),
+        ]
+        for task_no, pickup, dropoff, cargo, weight, priority in task_specs:
+            TransportTask.objects.update_or_create(
+                task_no=task_no,
+                defaults={
+                    "pickup_node": station_node(pickup),
+                    "dropoff_node": station_node(dropoff),
+                    "cargo_name": cargo,
+                    "cargo_weight": weight,
+                    "priority": priority,
+                    "status": TransportTask.Status.PENDING,
+                    "assigned_agv": None,
+                    "schedule_run": None,
+                    "sequence_number": 0,
+                    "planned_wait_seconds": 0,
+                    "optimization_details": {},
+                    "route": {},
+                    "total_distance": 0,
+                    "estimated_duration": 0,
+                    "scheduled_start": None,
+                    "scheduled_end": None,
+                    "started_at": None,
+                    "completed_at": None,
+                    "notes": "",
+                },
+            )
+
+        User = get_user_model()
+        if not User.objects.filter(username="admin").exists():
+            User.objects.create_superuser("admin", "admin@example.com", "Admin123!")
+            self.stdout.write(self.style.SUCCESS("已创建管理员 admin / Admin123!"))
+        else:
+            self.stdout.write("管理员 admin 已存在，未修改密码。")
+
+        self.stdout.write(self.style.SUCCESS(
+            f"演示数据初始化完成：节点 {MapNode.objects.count()}，道路 {MapEdge.objects.count()}，"
+            f"障碍 {MapObstacle.objects.count()}，AGV {AGV.objects.count()}，"
+            f"待调度任务 {TransportTask.objects.filter(status='pending').count()}"
+        ))

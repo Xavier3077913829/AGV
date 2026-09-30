@@ -25,3 +25,12 @@ staticfiles/
 # --- 操作系统 ---
 .DS_Store
 Thumbs.db
+# --- Node / Vue ---
+node_modules/
+frontend/dist/
+frontend/.env
+.env
+
+# --- 上传与运行时 ---
+*.pid
+*.sqlite3
