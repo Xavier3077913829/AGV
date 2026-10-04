@@ -13,10 +13,10 @@ const props = defineProps({
 const utilization = computed(() => props.overview.fleet_utilization || 0)
 const recentTasks = computed(() => props.tasks.slice(0, 6))
 const statusGroups = computed(() => [
-  { key: 'idle', label: '空闲', color: '#41d69a' },
-  { key: 'busy', label: '执行中', color: '#4b8cff' },
-  { key: 'charging', label: '充电中', color: '#ffbd4a' },
-  { key: 'offline', label: '离线/故障', color: '#ff6372' },
+  { key: 'idle', label: '空闲', color: '#29976a' },
+  { key: 'busy', label: '执行中', color: '#2f6fda' },
+  { key: 'charging', label: '充电中', color: '#c58a1b' },
+  { key: 'offline', label: '离线/故障', color: '#cf5260' },
 ])
 
 function groupCount(key) {
@@ -60,7 +60,7 @@ function formatTime(value) {
                 <div class="legend-number">{{ groupCount(item.key) }} 台</div>
               </div>
               <div class="legend-row">
-                <div class="legend-name"><span class="legend-dot" style="--dot: #9b7cff"></span>平均电量</div>
+                <div class="legend-name"><span class="legend-dot" style="--dot: #7858ce"></span>平均电量</div>
                 <div class="legend-number">{{ overview.average_battery || 0 }}%</div>
               </div>
             </div>

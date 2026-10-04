@@ -9,7 +9,7 @@ const hoveredNode = ref(null)
 const width = 920
 const height = 880
 const padding = 36
-const colors = ['#23d5e6', '#4b8cff', '#9b7cff', '#ffbd4a', '#41d69a', '#ff6372']
+const colors = ['#0e8792', '#2f6fda', '#7858ce', '#c58a1b', '#29976a', '#cf5260']
 
 const nodes = computed(() => props.mapData.nodes || [])
 const edges = computed(() => props.mapData.edges || [])
@@ -102,7 +102,7 @@ function obstacleRect(item) {
 }
 
 function nodeColor(type) {
-  return { parking: '#66819c', pickup: '#41d69a', dropoff: '#ffbd4a', charging: '#9b7cff', intersection: '#3b6e9e' }[type] || '#3b6e9e'
+  return { parking: '#7b8d98', pickup: '#29976a', dropoff: '#c58a1b', charging: '#7858ce', intersection: '#67808d' }[type] || '#67808d'
 }
 
 function routeColor(index) {
@@ -158,13 +158,13 @@ function clearPath() {
               <text v-if="node.node_type !== 'intersection'" class="map-node-label" :x="point(node.id).x" :y="point(node.id).y + 23" text-anchor="middle">{{ node.code }}</text>
             </g>
             <g v-if="pathResult" class="planner-endpoints">
-              <circle :cx="point(pathResult.route.nodes[0]).x" :cy="point(pathResult.route.nodes[0]).y" r="15" fill="none" stroke="#41d69a" stroke-width="4" />
-              <circle :cx="point(pathResult.route.nodes[pathResult.route.nodes.length - 1]).x" :cy="point(pathResult.route.nodes[pathResult.route.nodes.length - 1]).y" r="15" fill="none" stroke="#ff6372" stroke-width="4" />
+              <circle :cx="point(pathResult.route.nodes[0]).x" :cy="point(pathResult.route.nodes[0]).y" r="15" fill="none" stroke="#29976a" stroke-width="4" />
+              <circle :cx="point(pathResult.route.nodes[pathResult.route.nodes.length - 1]).x" :cy="point(pathResult.route.nodes[pathResult.route.nodes.length - 1]).y" r="15" fill="none" stroke="#cf5260" stroke-width="4" />
             </g>
             <g v-for="(agv, index) in agvs" :key="agv.id" class="map-agv">
-              <circle :cx="point(agv.current_node).x + (index % 2) * 10 - 5" :cy="point(agv.current_node).y - 10 - Math.floor(index / 2) * 10" r="12" fill="#23d5e6" opacity="0.2" />
-              <circle :cx="point(agv.current_node).x + (index % 2) * 10 - 5" :cy="point(agv.current_node).y - 10 - Math.floor(index / 2) * 10" r="6" fill="#23d5e6" stroke="#03131f" stroke-width="2" />
-              <text :x="point(agv.current_node).x + (index % 2) * 10 - 5" :y="point(agv.current_node).y - 28 - Math.floor(index / 2) * 10" text-anchor="middle" fill="#8feaf2" font-size="10">{{ agv.code }}</text>
+              <circle :cx="point(agv.current_node).x + (index % 2) * 10 - 5" :cy="point(agv.current_node).y - 10 - Math.floor(index / 2) * 10" r="12" fill="#0e8792" opacity="0.2" />
+              <circle :cx="point(agv.current_node).x + (index % 2) * 10 - 5" :cy="point(agv.current_node).y - 10 - Math.floor(index / 2) * 10" r="6" fill="#0e8792" stroke="#ffffff" stroke-width="2" />
+              <text :x="point(agv.current_node).x + (index % 2) * 10 - 5" :y="point(agv.current_node).y - 28 - Math.floor(index / 2) * 10" text-anchor="middle" fill="#2f6f75" font-size="10">{{ agv.code }}</text>
             </g>
             <g v-if="hoveredNode" class="map-node-tooltip" pointer-events="none">
               <rect :x="point(hoveredNode.id).x + 12" :y="point(hoveredNode.id).y - 42" :width="hoverTooltipWidth" height="30" rx="6" />
@@ -191,9 +191,9 @@ function clearPath() {
         </div>
         <div class="legend-list mt-16">
           <div class="legend-row"><span class="legend-name"><span class="legend-dot" style="--dot: #000"></span>障碍区域</span></div>
-          <div class="legend-row"><span class="legend-name"><span class="legend-dot" style="--dot: #41d69a"></span>取货点</span></div>
-          <div class="legend-row"><span class="legend-name"><span class="legend-dot" style="--dot: #ffbd4a"></span>放货点</span></div>
-          <div class="legend-row"><span class="legend-name"><span class="legend-dot" style="--dot: #ff6372"></span>规划路径</span></div>
+          <div class="legend-row"><span class="legend-name"><span class="legend-dot" style="--dot: #29976a"></span>取货点</span></div>
+          <div class="legend-row"><span class="legend-name"><span class="legend-dot" style="--dot: #c58a1b"></span>放货点</span></div>
+          <div class="legend-row"><span class="legend-name"><span class="legend-dot" style="--dot: #cf5260"></span>规划路径</span></div>
         </div>
         <div class="executing-routes mt-16">
           <div class="route-section-head"><strong>正在执行任务路线</strong><span>{{ executingRoutes.length }} 条</span></div>
