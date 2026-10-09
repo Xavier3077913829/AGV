@@ -49,6 +49,8 @@ INSTALLED_APPS = [
     "corsheaders",
     "SchedulingDecision",
     "ManufacturingVision",
+    "EquipmentMonitoring",
+    "DemandForecast",
 ]
 
 MIDDLEWARE = [

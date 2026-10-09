@@ -659,7 +659,8 @@ tr:hover td { background: #f8fbfa; }
     height: auto;
     min-height: 0;
     padding: 12px 14px;
-    overflow: visible;
+    overflow-x: hidden;
+    overflow-y: visible;
     border-right: 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   }
