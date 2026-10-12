@@ -1,0 +1,711 @@
+industry,month,value
+All manufacturing industries,2026-08,972382.0
+All manufacturing industries,2026-07,967298.0
+All manufacturing industries,2026-06,963357.0
+All manufacturing industries,????-07,0.5
+All manufacturing industries,????-06,0.4
+All manufacturing industries,????-05,0.1
+All manufacturing industries,2026-08,976828.0
+All manufacturing industries,2026-07,971881.0
+All manufacturing industries,2026-06,962810.0
+All manufacturing industries,2025-08,951133.0
+Excluding transportation,2026-08,779696.0
+Excluding transportation,2026-07,775769.0
+Excluding transportation,2026-06,772665.0
+Excluding transportation,????-07,0.5
+Excluding transportation,????-06,0.4
+Excluding transportation,????-05,0.1
+Excluding transportation,2026-08,782036.0
+Excluding transportation,2026-07,778713.0
+Excluding transportation,2026-06,773239.0
+Excluding transportation,2025-08,760760.0
+Excluding defense,2026-08,937214.0
+Excluding defense,2026-07,932124.0
+Excluding defense,2026-06,928527.0
+Excluding defense,????-07,0.5
+Excluding defense,????-06,0.4
+Excluding defense,????-05,0.1
+Excluding defense,2026-08,941586.0
+Excluding defense,2026-07,936765.0
+Excluding defense,2026-06,927852.0
+Excluding defense,2025-08,917798.0
+With unfilled orders,2026-08,490638.0
+With unfilled orders,2026-07,487644.0
+With unfilled orders,2026-06,485169.0
+With unfilled orders,????-07,0.6
+With unfilled orders,????-06,0.5
+With unfilled orders,????-05,0.4
+With unfilled orders,2026-08,493062.0
+With unfilled orders,2026-07,490557.0
+With unfilled orders,2026-06,485912.0
+With unfilled orders,2025-08,475866.0
+Durable goods industries,2026-08,608338.0
+Durable goods industries,2026-07,605095.0
+Durable goods industries,2026-06,602261.0
+Durable goods industries,????-07,0.5
+Durable goods industries,????-06,0.5
+Durable goods industries,????-05,0.4
+Durable goods industries,2026-08,611595.0
+Durable goods industries,2026-07,608315.0
+Durable goods industries,2026-06,601573.0
+Durable goods industries,2025-08,593750.0
+Wood products,2026-08,18517.0
+Wood products,2026-07,18526.0
+Wood products,2026-06,18402.0
+Wood products,????-07,0.0
+Wood products,????-06,0.7
+Wood products,????-05,0.1
+Wood products,2026-08,18418.0
+Wood products,2026-07,18380.0
+Wood products,2026-06,18179.0
+Wood products,2025-08,18297.0
+Nonmetallic mineral products,2026-08,20746.0
+Nonmetallic mineral products,2026-07,20740.0
+Nonmetallic mineral products,2026-06,20687.0
+Nonmetallic mineral products,????-07,0.0
+Nonmetallic mineral products,????-06,0.3
+Nonmetallic mineral products,????-05,0.4
+Nonmetallic mineral products,2026-08,20715.0
+Nonmetallic mineral products,2026-07,20726.0
+Nonmetallic mineral products,2026-06,20765.0
+Nonmetallic mineral products,2025-08,20111.0
+Primary metals,2026-08,52191.0
+Primary metals,2026-07,51872.0
+Primary metals,2026-06,51200.0
+Primary metals,????-07,0.6
+Primary metals,????-06,1.3
+Primary metals,????-05,1.0
+Primary metals,2026-08,52244.0
+Primary metals,2026-07,52284.0
+Primary metals,2026-06,51194.0
+Primary metals,2025-08,48068.0
+Iron and steel mills,2026-08,27586.0
+Iron and steel mills,2026-07,27546.0
+Iron and steel mills,2026-06,26750.0
+Iron and steel mills,????-07,0.1
+Iron and steel mills,????-06,3.0
+Iron and steel mills,????-05,0.4
+Iron and steel mills,2026-08,27574.0
+Iron and steel mills,2026-07,27630.0
+Iron and steel mills,2026-06,26611.0
+Iron and steel mills,2025-08,26045.0
+Aluminum and nonferrous metals,2026-08,21099.0
+Aluminum and nonferrous metals,2026-07,21022.0
+Aluminum and nonferrous metals,2026-06,21045.0
+Aluminum and nonferrous metals,????-07,0.4
+Aluminum and nonferrous metals,????-06,-0.1
+Aluminum and nonferrous metals,????-05,1.7
+Aluminum and nonferrous metals,2026-08,21222.0
+Aluminum and nonferrous metals,2026-07,21406.0
+Aluminum and nonferrous metals,2026-06,21186.0
+Aluminum and nonferrous metals,2025-08,18818.0
+Ferrous metal foundries,2026-08,3506.0
+Ferrous metal foundries,2026-07,3304.0
+Ferrous metal foundries,2026-06,3405.0
+Ferrous metal foundries,????-07,6.1
+Ferrous metal foundries,????-06,-3.0
+Ferrous metal foundries,????-05,0.7
+Ferrous metal foundries,2026-08,3448.0
+Ferrous metal foundries,2026-07,3248.0
+Ferrous metal foundries,2026-06,3397.0
+Ferrous metal foundries,2025-08,3205.0
+Fabricated metal products,2026-08,75835.0
+Fabricated metal products,2026-07,75396.0
+Fabricated metal products,2026-06,75131.0
+Fabricated metal products,????-07,0.6
+Fabricated metal products,????-06,0.4
+Fabricated metal products,????-05,0.2
+Fabricated metal products,2026-08,76070.0
+Fabricated metal products,2026-07,76139.0
+Fabricated metal products,2026-06,75635.0
+Fabricated metal products,2025-08,74318.0
+Machinery,2026-08,106771.0
+Machinery,2026-07,105746.0
+Machinery,2026-06,105119.0
+Machinery,????-07,1.0
+Machinery,????-06,0.6
+Machinery,????-05,0.4
+Machinery,2026-08,106495.0
+Machinery,2026-07,105289.0
+Machinery,2026-06,105244.0
+Machinery,2025-08,102398.0
+Farm machinery,2026-08,5696.0
+Farm machinery,2026-07,5589.0
+Farm machinery,2026-06,5589.0
+Farm machinery,????-07,1.9
+Farm machinery,????-06,0.0
+Farm machinery,????-05,0.6
+Farm machinery,2026-08,5469.0
+Farm machinery,2026-07,5421.0
+Farm machinery,2026-06,5501.0
+Farm machinery,2025-08,5369.0
+Construction machinery,2026-08,10953.0
+Construction machinery,2026-07,10848.0
+Construction machinery,2026-06,10731.0
+Construction machinery,????-07,1.0
+Construction machinery,????-06,1.1
+Construction machinery,????-05,0.7
+Construction machinery,2026-08,10888.0
+Construction machinery,2026-07,10787.0
+Construction machinery,2026-06,10723.0
+Construction machinery,2025-08,9985.0
+and gas field machinery,2026-08,5923.0
+and gas field machinery,2026-07,5795.0
+and gas field machinery,2026-06,5733.0
+and gas field machinery,????-07,2.2
+and gas field machinery,????-06,1.1
+and gas field machinery,????-05,0.0
+and gas field machinery,2026-08,5946.0
+and gas field machinery,2026-07,5838.0
+and gas field machinery,2026-06,5761.0
+and gas field machinery,2025-08,5356.0
+Industrial machinery,2026-08,10039.0
+Industrial machinery,2026-07,10244.0
+Industrial machinery,2026-06,10414.0
+Industrial machinery,????-07,-2.0
+Industrial machinery,????-06,-1.6
+Industrial machinery,????-05,-2.1
+Industrial machinery,2026-08,9991.0
+Industrial machinery,2026-07,9746.0
+Industrial machinery,2026-06,10604.0
+Industrial machinery,2025-08,11274.0
+Photographic equipment,2026-08,1534.0
+Photographic equipment,2026-07,1534.0
+Photographic equipment,2026-06,1528.0
+Photographic equipment,????-07,0.0
+Photographic equipment,????-06,0.4
+Photographic equipment,????-05,0.3
+Photographic equipment,2026-08,1567.0
+Photographic equipment,2026-07,1545.0
+Photographic equipment,2026-06,1494.0
+Photographic equipment,2025-08,1535.0
+and refrigeration equipment,2026-08,11491.0
+and refrigeration equipment,2026-07,11305.0
+and refrigeration equipment,2026-06,11059.0
+and refrigeration equipment,????-07,1.6
+and refrigeration equipment,????-06,2.2
+and refrigeration equipment,????-05,1.8
+and refrigeration equipment,2026-08,11317.0
+and refrigeration equipment,2026-07,11214.0
+and refrigeration equipment,2026-06,10987.0
+and refrigeration equipment,2025-08,10608.0
+Metalworking machinery,2026-08,8246.0
+Metalworking machinery,2026-07,8176.0
+Metalworking machinery,2026-06,8228.0
+Metalworking machinery,????-07,0.9
+Metalworking machinery,????-06,-0.6
+Metalworking machinery,????-05,0.2
+Metalworking machinery,2026-08,8221.0
+Metalworking machinery,2026-07,8288.0
+Metalworking machinery,2026-06,8258.0
+Metalworking machinery,2025-08,7891.0
+power transmission equipment,2026-08,14654.0
+power transmission equipment,2026-07,14304.0
+power transmission equipment,2026-06,14058.0
+power transmission equipment,????-07,2.4
+power transmission equipment,????-06,1.7
+power transmission equipment,????-05,1.7
+power transmission equipment,2026-08,14730.0
+power transmission equipment,2026-07,14593.0
+power transmission equipment,2026-06,14199.0
+power transmission equipment,2025-08,12538.0
+Material handling equipment,2026-08,9838.0
+Material handling equipment,2026-07,9756.0
+Material handling equipment,2026-06,9706.0
+Material handling equipment,????-07,0.8
+Material handling equipment,????-06,0.5
+Material handling equipment,????-05,-0.4
+Material handling equipment,2026-08,9967.0
+Material handling equipment,2026-07,9830.0
+Material handling equipment,2026-06,9688.0
+Material handling equipment,2025-08,9749.0
+Computers and electronic products2,2026-08,68742.0
+Computers and electronic products2,2026-07,68601.0
+Computers and electronic products2,2026-06,68513.0
+Computers and electronic products2,????-07,0.2
+Computers and electronic products2,????-06,0.1
+Computers and electronic products2,????-05,0.9
+Computers and electronic products2,2026-08,69303.0
+Computers and electronic products2,2026-07,68953.0
+Computers and electronic products2,2026-06,68220.0
+Computers and electronic products2,2025-08,67661.0
+Computers,2026-08,2637.0
+Computers,2026-07,2665.0
+Computers,2026-06,2631.0
+Computers,????-07,-1.1
+Computers,????-06,1.3
+Computers,????-05,1.0
+Computers,2026-08,2742.0
+Computers,2026-07,2722.0
+Computers,2026-06,2692.0
+Computers,2025-08,2831.0
+Computer storage devices,2026-08,1136.0
+Computer storage devices,2026-07,1094.0
+Computer storage devices,2026-06,1098.0
+Computer storage devices,????-07,3.8
+Computer storage devices,????-06,-0.4
+Computer storage devices,????-05,-1.4
+Computer storage devices,2026-08,1198.0
+Computer storage devices,2026-07,1121.0
+Computer storage devices,2026-06,1092.0
+Computer storage devices,2025-08,1117.0
+Other peripheral equipment,2026-08,654.0
+Other peripheral equipment,2026-07,634.0
+Other peripheral equipment,2026-06,628.0
+Other peripheral equipment,????-07,3.2
+Other peripheral equipment,????-06,1.0
+Other peripheral equipment,????-05,0.0
+Other peripheral equipment,2026-08,669.0
+Other peripheral equipment,2026-07,637.0
+Other peripheral equipment,2026-06,637.0
+Other peripheral equipment,2025-08,674.0
+equipment,2026-08,6029.0
+equipment,2026-07,6039.0
+equipment,2026-06,6025.0
+equipment,????-07,-0.2
+equipment,????-06,0.2
+equipment,????-05,0.5
+equipment,2026-08,6191.0
+equipment,2026-07,6085.0
+equipment,2026-06,5995.0
+equipment,2025-08,6043.0
+Defense communications equipment,2026-08,835.0
+Defense communications equipment,2026-07,843.0
+Defense communications equipment,2026-06,850.0
+Defense communications equipment,????-07,-0.9
+Defense communications equipment,????-06,-0.8
+Defense communications equipment,????-05,-1.2
+Defense communications equipment,2026-08,835.0
+Defense communications equipment,2026-07,843.0
+Defense communications equipment,2026-06,850.0
+Defense communications equipment,2025-08,865.0
+Audio and video equipment,2026-08,710.0
+Audio and video equipment,2026-07,714.0
+Audio and video equipment,2026-06,727.0
+Audio and video equipment,????-07,-0.6
+Audio and video equipment,????-06,-1.8
+Audio and video equipment,????-05,-0.1
+Audio and video equipment,2026-08,709.0
+Audio and video equipment,2026-07,694.0
+Audio and video equipment,2026-06,727.0
+Audio and video equipment,2025-08,770.0
+Electronic components,2026-08,14129.0
+Electronic components,2026-07,14001.0
+Electronic components,2026-06,13989.0
+Electronic components,????-07,0.9
+Electronic components,????-06,0.1
+Electronic components,????-05,3.8
+Electronic components,2026-08,13969.0
+Electronic components,2026-07,14077.0
+Electronic components,2026-06,13795.0
+Electronic components,2025-08,12878.0
+equipment,2026-08,5366.0
+equipment,2026-07,5366.0
+equipment,2026-06,5386.0
+equipment,????-07,0.0
+equipment,????-06,-0.4
+equipment,????-05,-0.1
+equipment,2026-08,5478.0
+equipment,2026-07,5429.0
+equipment,2026-06,5356.0
+equipment,2025-08,5383.0
+equipment,2026-08,4111.0
+equipment,2026-07,4107.0
+equipment,2026-06,4086.0
+equipment,????-07,0.1
+equipment,????-06,0.5
+equipment,????-05,-0.3
+equipment,2026-08,4090.0
+equipment,2026-07,4095.0
+equipment,2026-06,4050.0
+equipment,2025-08,4068.0
+and control instruments,2026-08,23704.0
+and control instruments,2026-07,23702.0
+and control instruments,2026-06,23678.0
+and control instruments,????-07,0.0
+and control instruments,????-06,0.1
+and control instruments,????-05,0.3
+and control instruments,2026-08,23948.0
+and control instruments,2026-07,23899.0
+and control instruments,2026-06,23714.0
+and control instruments,2025-08,23693.0
+and components,2026-08,29800.0
+and components,2026-07,29643.0
+and components,2026-06,29498.0
+and components,????-07,0.5
+and components,????-06,0.5
+and components,????-05,-0.3
+and components,2026-08,30222.0
+and components,2026-07,30109.0
+and components,2026-06,29745.0
+and components,2025-08,29553.0
+Electric lighting equipment,2026-08,3012.0
+Electric lighting equipment,2026-07,2993.0
+Electric lighting equipment,2026-06,2979.0
+Electric lighting equipment,????-07,0.6
+Electric lighting equipment,????-06,0.5
+Electric lighting equipment,????-05,-0.3
+Electric lighting equipment,2026-08,3025.0
+Electric lighting equipment,2026-07,2993.0
+Electric lighting equipment,2026-06,2953.0
+Electric lighting equipment,2025-08,2922.0
+Household appliances,2026-08,3936.0
+Household appliances,2026-07,3909.0
+Household appliances,2026-06,3892.0
+Household appliances,????-07,0.7
+Household appliances,????-06,0.4
+Household appliances,????-05,-0.8
+Household appliances,2026-08,4083.0
+Household appliances,2026-07,4079.0
+Household appliances,2026-06,3942.0
+Household appliances,2025-08,4000.0
+Electrical equipment,2026-08,10426.0
+Electrical equipment,2026-07,10345.0
+Electrical equipment,2026-06,10252.0
+Electrical equipment,????-07,0.8
+Electrical equipment,????-06,0.9
+Electrical equipment,????-05,-0.6
+Electrical equipment,2026-08,10596.0
+Electrical equipment,2026-07,10452.0
+Electrical equipment,2026-06,10281.0
+Electrical equipment,2025-08,10329.0
+Batteries,2026-08,4022.0
+Batteries,2026-07,4027.0
+Batteries,2026-06,4021.0
+Batteries,????-07,-0.1
+Batteries,????-06,0.1
+Batteries,????-05,0.2
+Batteries,2026-08,4110.0
+Batteries,2026-07,4175.0
+Batteries,2026-06,4192.0
+Batteries,2025-08,3969.0
+Transportation equipment,2026-08,192686.0
+Transportation equipment,2026-07,191529.0
+Transportation equipment,2026-06,190692.0
+Transportation equipment,????-07,0.6
+Transportation equipment,????-06,0.4
+Transportation equipment,????-05,0.4
+Transportation equipment,2026-08,194792.0
+Transportation equipment,2026-07,193168.0
+Transportation equipment,2026-06,189571.0
+Transportation equipment,2025-08,190373.0
+Automobiles,2026-08,8594.0
+Automobiles,2026-07,8591.0
+Automobiles,2026-06,8487.0
+Automobiles,????-07,0.0
+Automobiles,????-06,1.2
+Automobiles,????-05,-0.6
+Automobiles,2026-08,9047.0
+Automobiles,2026-07,9002.0
+Automobiles,2026-06,8333.0
+Automobiles,2025-08,9443.0
+Light trucks and utility vehicles,2026-08,10140.0
+Light trucks and utility vehicles,2026-07,10128.0
+Light trucks and utility vehicles,2026-06,10285.0
+Light trucks and utility vehicles,????-07,0.1
+Light trucks and utility vehicles,????-06,-1.5
+Light trucks and utility vehicles,????-05,1.0
+Light trucks and utility vehicles,2026-08,10472.0
+Light trucks and utility vehicles,2026-07,10240.0
+Light trucks and utility vehicles,2026-06,9466.0
+Light trucks and utility vehicles,2025-08,11506.0
+Heavy duty trucks,2026-08,3707.0
+Heavy duty trucks,2026-07,3612.0
+Heavy duty trucks,2026-06,3439.0
+Heavy duty trucks,????-07,2.6
+Heavy duty trucks,????-06,5.0
+Heavy duty trucks,????-05,4.6
+Heavy duty trucks,2026-08,3726.0
+Heavy duty trucks,2026-07,3596.0
+Heavy duty trucks,2026-06,3429.0
+Heavy duty trucks,2025-08,3259.0
+and trailers,2026-08,45074.0
+and trailers,2026-07,44930.0
+and trailers,2026-06,44947.0
+and trailers,????-07,0.3
+and trailers,????-06,0.0
+and trailers,????-05,0.0
+and trailers,2026-08,45390.0
+and trailers,2026-07,45517.0
+and trailers,2026-06,44360.0
+and trailers,2025-08,44017.0
+Nondefense aircraft and parts,2026-08,86527.0
+Nondefense aircraft and parts,2026-07,85599.0
+Nondefense aircraft and parts,2026-06,84930.0
+Nondefense aircraft and parts,????-07,1.1
+Nondefense aircraft and parts,????-06,0.8
+Nondefense aircraft and parts,????-05,0.5
+Nondefense aircraft and parts,2026-08,87303.0
+Nondefense aircraft and parts,2026-07,86028.0
+Nondefense aircraft and parts,2026-06,85314.0
+Nondefense aircraft and parts,2025-08,84648.0
+Defense aircraft and parts,2026-08,15328.0
+Defense aircraft and parts,2026-07,15411.0
+Defense aircraft and parts,2026-06,15322.0
+Defense aircraft and parts,????-07,-0.5
+Defense aircraft and parts,????-06,0.6
+Defense aircraft and parts,????-05,-0.8
+Defense aircraft and parts,2026-08,15319.0
+Defense aircraft and parts,2026-07,15456.0
+Defense aircraft and parts,2026-06,15302.0
+Defense aircraft and parts,2025-08,15333.0
+Ships and boats,2026-08,7966.0
+Ships and boats,2026-07,7853.0
+Ships and boats,2026-06,7779.0
+Ships and boats,????-07,1.4
+Ships and boats,????-06,1.0
+Ships and boats,????-05,-0.2
+Ships and boats,2026-08,8067.0
+Ships and boats,2026-07,7735.0
+Ships and boats,2026-06,7891.0
+Ships and boats,2025-08,7196.0
+Furniture and related products,2026-08,10804.0
+Furniture and related products,2026-07,10787.0
+Furniture and related products,2026-06,10773.0
+Furniture and related products,????-07,0.2
+Furniture and related products,????-06,0.1
+Furniture and related products,????-05,-0.1
+Furniture and related products,2026-08,10807.0
+Furniture and related products,2026-07,10901.0
+Furniture and related products,2026-06,11002.0
+Furniture and related products,2025-08,10888.0
+Miscellaneous durable goods,2026-08,32246.0
+Miscellaneous durable goods,2026-07,32255.0
+Miscellaneous durable goods,2026-06,32246.0
+Miscellaneous durable goods,????-07,0.0
+Miscellaneous durable goods,????-06,0.0
+Miscellaneous durable goods,????-05,-0.2
+Miscellaneous durable goods,2026-08,32529.0
+Miscellaneous durable goods,2026-07,32366.0
+Miscellaneous durable goods,2026-06,32018.0
+Miscellaneous durable goods,2025-08,32083.0
+Nondurable goods industries,2026-08,364044.0
+Nondurable goods industries,2026-07,362203.0
+Nondurable goods industries,2026-06,361096.0
+Nondurable goods industries,????-07,0.5
+Nondurable goods industries,????-06,0.3
+Nondurable goods industries,????-05,-0.3
+Nondurable goods industries,2026-08,365233.0
+Nondurable goods industries,2026-07,363566.0
+Nondurable goods industries,2026-06,361237.0
+Nondurable goods industries,2025-08,357383.0
+Food products,2026-08,73590.0
+Food products,2026-07,73850.0
+Food products,2026-06,74092.0
+Food products,????-07,-0.4
+Food products,????-06,-0.3
+Food products,????-05,-0.1
+Food products,2026-08,73218.0
+Food products,2026-07,72858.0
+Food products,2026-06,72834.0
+Food products,2025-08,73374.0
+Grain and oilseed milling,2026-08,7631.0
+Grain and oilseed milling,2026-07,7672.0
+Grain and oilseed milling,2026-06,7635.0
+Grain and oilseed milling,????-07,-0.5
+Grain and oilseed milling,????-06,0.5
+Grain and oilseed milling,????-05,0.3
+Grain and oilseed milling,2026-08,7501.0
+Grain and oilseed milling,2026-07,7511.0
+Grain and oilseed milling,2026-06,7434.0
+Grain and oilseed milling,2025-08,7367.0
+Dairy products,2026-08,11633.0
+Dairy products,2026-07,11591.0
+Dairy products,2026-06,11662.0
+Dairy products,????-07,0.4
+Dairy products,????-06,-0.6
+Dairy products,????-05,-0.5
+Dairy products,2026-08,11764.0
+Dairy products,2026-07,11926.0
+Dairy products,2026-06,12108.0
+Dairy products,2025-08,11806.0
+"Meat, poultry, and seafood products",2026-08,13103.0
+"Meat, poultry, and seafood products",2026-07,13188.0
+"Meat, poultry, and seafood products",2026-06,13219.0
+"Meat, poultry, and seafood products",????-07,-0.6
+"Meat, poultry, and seafood products",????-06,-0.2
+"Meat, poultry, and seafood products",????-05,0.0
+"Meat, poultry, and seafood products",2026-08,13363.0
+"Meat, poultry, and seafood products",2026-07,13243.0
+"Meat, poultry, and seafood products",2026-06,12927.0
+"Meat, poultry, and seafood products",2025-08,13409.0
+Beverage and tobacco products,2026-08,34552.0
+Beverage and tobacco products,2026-07,34639.0
+Beverage and tobacco products,2026-06,34753.0
+Beverage and tobacco products,????-07,-0.3
+Beverage and tobacco products,????-06,-0.3
+Beverage and tobacco products,????-05,-0.2
+Beverage and tobacco products,2026-08,34425.0
+Beverage and tobacco products,2026-07,34372.0
+Beverage and tobacco products,2026-06,34742.0
+Beverage and tobacco products,2025-08,34125.0
+Beverages,2026-08,30641.0
+Beverages,2026-07,30706.0
+Beverages,2026-06,30790.0
+Beverages,????-07,-0.2
+Beverages,????-06,-0.3
+Beverages,????-05,-0.3
+Beverages,2026-08,30793.0
+Beverages,2026-07,30740.0
+Beverages,2026-06,30927.0
+Beverages,2025-08,30687.0
+Tobacco,2026-08,3911.0
+Tobacco,2026-07,3933.0
+Tobacco,2026-06,3963.0
+Tobacco,????-07,-0.6
+Tobacco,????-06,-0.8
+Tobacco,????-05,0.9
+Tobacco,2026-08,3632.0
+Tobacco,2026-07,3632.0
+Tobacco,2026-06,3815.0
+Tobacco,2025-08,3438.0
+Textile mills,2026-08,3490.0
+Textile mills,2026-07,3523.0
+Textile mills,2026-06,3490.0
+Textile mills,????-07,-0.9
+Textile mills,????-06,0.9
+Textile mills,????-05,0.6
+Textile mills,2026-08,3519.0
+Textile mills,2026-07,3556.0
+Textile mills,2026-06,3492.0
+Textile mills,2025-08,3450.0
+Textile products,2026-08,3690.0
+Textile products,2026-07,3702.0
+Textile products,2026-06,3703.0
+Textile products,????-07,-0.3
+Textile products,????-06,0.0
+Textile products,????-05,-0.7
+Textile products,2026-08,3683.0
+Textile products,2026-07,3669.0
+Textile products,2026-06,3674.0
+Textile products,2025-08,3705.0
+Apparel,2026-08,1983.0
+Apparel,2026-07,1981.0
+Apparel,2026-06,1965.0
+Apparel,????-07,0.1
+Apparel,????-06,0.8
+Apparel,????-05,-0.2
+Apparel,2026-08,2056.0
+Apparel,2026-07,2052.0
+Apparel,2026-06,1985.0
+Apparel,2025-08,2060.0
+Leather and allied products,2026-08,1184.0
+Leather and allied products,2026-07,1180.0
+Leather and allied products,2026-06,1175.0
+Leather and allied products,????-07,0.3
+Leather and allied products,????-06,0.4
+Leather and allied products,????-05,0.5
+Leather and allied products,2026-08,1187.0
+Leather and allied products,2026-07,1184.0
+Leather and allied products,2026-06,1166.0
+Leather and allied products,2025-08,1091.0
+Paper products,2026-08,20907.0
+Paper products,2026-07,20837.0
+Paper products,2026-06,20801.0
+Paper products,????-07,0.3
+Paper products,????-06,0.2
+Paper products,????-05,0.1
+Paper products,2026-08,21104.0
+Paper products,2026-07,20920.0
+Paper products,2026-06,20778.0
+Paper products,2025-08,21351.0
+"Pulp, paper, and paperboard mills",2026-08,6305.0
+"Pulp, paper, and paperboard mills",2026-07,6315.0
+"Pulp, paper, and paperboard mills",2026-06,6294.0
+"Pulp, paper, and paperboard mills",????-07,-0.2
+"Pulp, paper, and paperboard mills",????-06,0.3
+"Pulp, paper, and paperboard mills",????-05,0.1
+"Pulp, paper, and paperboard mills",2026-08,6306.0
+"Pulp, paper, and paperboard mills",2026-07,6323.0
+"Pulp, paper, and paperboard mills",2026-06,6287.0
+"Pulp, paper, and paperboard mills",2025-08,6409.0
+Paperboard containers,2026-08,8132.0
+Paperboard containers,2026-07,8080.0
+Paperboard containers,2026-06,8081.0
+Paperboard containers,????-07,0.6
+Paperboard containers,????-06,0.0
+Paperboard containers,????-05,0.5
+Paperboard containers,2026-08,8253.0
+Paperboard containers,2026-07,8108.0
+Paperboard containers,2026-06,8056.0
+Paperboard containers,2025-08,8291.0
+Printing,2026-08,7806.0
+Printing,2026-07,7750.0
+Printing,2026-06,7628.0
+Printing,????-07,0.7
+Printing,????-06,1.6
+Printing,????-05,0.6
+Printing,2026-08,7944.0
+Printing,2026-07,7847.0
+Printing,2026-06,7618.0
+Printing,2025-08,7709.0
+Petroleum and coal products,2026-08,48977.0
+Petroleum and coal products,2026-07,47801.0
+Petroleum and coal products,2026-06,46865.0
+Petroleum and coal products,????-07,2.5
+Petroleum and coal products,????-06,2.0
+Petroleum and coal products,????-05,-3.2
+Petroleum and coal products,2026-08,49384.0
+Petroleum and coal products,2026-07,48996.0
+Petroleum and coal products,2026-06,47795.0
+Petroleum and coal products,2025-08,44639.0
+Petroleum refineries,2026-08,41121.0
+Petroleum refineries,2026-07,40176.0
+Petroleum refineries,2026-06,39522.0
+Petroleum refineries,????-07,2.4
+Petroleum refineries,????-06,1.7
+Petroleum refineries,????-05,-3.8
+Petroleum refineries,2026-08,41524.0
+Petroleum refineries,2026-07,41269.0
+Petroleum refineries,2026-06,40353.0
+Petroleum refineries,2025-08,37525.0
+Chemical products,2026-08,131713.0
+Chemical products,2026-07,130921.0
+Chemical products,2026-06,130894.0
+Chemical products,????-07,0.6
+Chemical products,????-06,0.0
+Chemical products,????-05,0.4
+Chemical products,2026-08,132457.0
+Chemical products,2026-07,132039.0
+Chemical products,2026-06,131553.0
+Chemical products,2025-08,130467.0
+agricultural chemicals,2026-08,6623.0
+agricultural chemicals,2026-07,6437.0
+agricultural chemicals,2026-06,6785.0
+agricultural chemicals,????-07,2.9
+agricultural chemicals,????-06,-5.1
+agricultural chemicals,????-05,1.1
+agricultural chemicals,2026-08,6524.0
+agricultural chemicals,2026-07,6299.0
+agricultural chemicals,2026-06,6593.0
+agricultural chemicals,2025-08,6814.0
+Pharmaceuticals and medicines,2026-08,59505.0
+Pharmaceuticals and medicines,2026-07,59354.0
+Pharmaceuticals and medicines,2026-06,59106.0
+Pharmaceuticals and medicines,????-07,0.3
+Pharmaceuticals and medicines,????-06,0.4
+Pharmaceuticals and medicines,????-05,0.7
+Pharmaceuticals and medicines,2026-08,59217.0
+Pharmaceuticals and medicines,2026-07,60191.0
+Pharmaceuticals and medicines,2026-06,60035.0
+Pharmaceuticals and medicines,2025-08,58393.0
+"Paints, coatings, and adhesives",2026-08,6157.0
+"Paints, coatings, and adhesives",2026-07,6125.0
+"Paints, coatings, and adhesives",2026-06,6074.0
+"Paints, coatings, and adhesives",????-07,0.5
+"Paints, coatings, and adhesives",????-06,0.8
+"Paints, coatings, and adhesives",????-05,0.0
+"Paints, coatings, and adhesives",2026-08,6148.0
+"Paints, coatings, and adhesives",2026-07,6188.0
+"Paints, coatings, and adhesives",2026-06,6115.0
+"Paints, coatings, and adhesives",2025-08,6078.0
+Plastics and rubber products,2026-08,36152.0
+Plastics and rubber products,2026-07,36019.0
+Plastics and rubber products,2026-06,35730.0
+Plastics and rubber products,????-07,0.4
+Plastics and rubber products,????-06,0.8
+Plastics and rubber products,????-05,0.5
+Plastics and rubber products,2026-08,36256.0
+Plastics and rubber products,2026-07,36073.0
+Plastics and rubber products,2026-06,35600.0
+Plastics and rubber products,2025-08,35412.0

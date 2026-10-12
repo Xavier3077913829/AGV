@@ -46,7 +46,7 @@
 | 后端 | Python 3.10+、Django 5.2、Django REST Framework |
 | 数据库 | MySQL 8.0 |
 | 前端 | Vue 3、Vite、原生 SVG 地图可视化 |
-| 调度算法 | Dijkstra、综合成本选车、贪心多任务分配、节点时间窗避碰 |
+| 调度算法 | Dijkstra（含路径缓存）、综合成本选车、最优插入构造 + 变邻域下降（relocate/swap/or-opt/2-opt）、状态压缩 DP（≤10 任务精确解）、最近邻 + 2-opt（大规模）、节点时间窗避碰 |
 | 接口 | RESTful JSON API |
 
 ## 3. 项目结构
@@ -374,3 +374,45 @@ C:\Users\ssync\miniconda3\envs\pmp\python.exe manage.py test ManufacturingVision
 - 前端显示历史曲线、未来预测曲线、模型对比和预测记录。
 
 详细说明见 [`DemandForecast/README.md`](DemandForecast/README.md)。
+
+## 15. 公开数据集接入（任务 6 / 任务 7）
+
+除内置合成演示数据外，项目支持接入**公开真实数据集**，数据文件统一放在 `datasets/` 下，
+转换脚本为 [`tools/build_public_datasets.py`](tools/build_public_datasets.py)（可复现，不依赖 Django）。
+
+| 数据集 | 用途 | 规模 | 性质 |
+| --- | --- | --- | --- |
+| `datasets/equipment/ai4i_equipment.csv` | 设备状态监测（任务 6） | 10,000 行 × 5 特征 + label | 公开基准数据集（**基于真实工业过程模型生成的合成数据**） |
+| `datasets/forecast/online_retail_daily.csv` | 订单需求预测（任务 7） | 374 天日订单量 | **真实交易数据**（541,909 条交易聚合） |
+| `datasets/m3/*.csv` | 制造业订单横截面 | 6 张表、2,880 条记录 | **真实官方统计**（仅最近 3 个月，不能做时间序列） |
+
+重新生成：
+
+```powershell
+python tools/build_public_datasets.py `
+  --ai4i   "E:\下载文件\ai4i+2020+predictive+maintenance+dataset.zip" `
+  --retail "E:\下载文件\online+retail.zip" `
+  --m3     "E:\下载文件\数据.zip"
+```
+
+新增接口：
+
+| 方法 | 地址 | 说明 |
+| --- | --- | --- |
+| GET | `/api/equipment/datasets/` | 列出设备数据集（来源、行数、标签分布） |
+| GET | `/api/equipment/model/?data_source=ai4i_equipment` | 用真实数据集训练并返回指标与特征重要性 |
+| POST | `/api/equipment/diagnose/` | 支持 `dataset` 与 `data_source` 参数，直接用真实数据诊断 |
+| GET | `/api/forecast/series/` | 列出可用真实订单序列 |
+| POST | `/api/forecast/predict/` | 支持 `series` 参数（如 `online_retail_daily`） |
+
+实测指标（真实数据集，本机复现）：
+
+- 设备监测（AI4I，真实标签）：accuracy **0.8984**、F1-macro **0.5042**；
+  `worn` 类仅 46 条样本，F1 仅 0.106 —— **真实数据的类别不平衡会显著拉低指标**，报告中需如实说明。
+- 订单预测（Online Retail 日订单量，374 天）：移动平均 MAPE 35.30%、**Holt-Winters 24.32%**、ARIMA 32.71%，
+  `auto` 自动选中 Holt-Winters。
+
+> 数据来源、许可、字段映射与派生公式、诚实提示（合成 vs 实测、派生特征、阈值需重新标定）详见
+> [`datasets/equipment/README.md`](datasets/equipment/README.md)、
+> [`datasets/forecast/README.md`](datasets/forecast/README.md)、
+> [`datasets/m3/README.md`](datasets/m3/README.md)。引用数据集时请遵守各自的许可与引用要求。
