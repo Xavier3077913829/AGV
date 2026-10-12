@@ -7,6 +7,8 @@ import AgvView from './views/AgvView.vue'
 import TaskView from './views/TaskView.vue'
 import MapView from './views/MapView.vue'
 import VisionView from './views/VisionView.vue'
+import EquipmentView from './views/EquipmentView.vue'
+import ForecastView from './views/ForecastView.vue'
 
 const activeTab = ref('dashboard')
 const loading = ref(true)
@@ -28,6 +30,8 @@ const tabs = [
   { key: 'tasks', label: '运输任务', icon: '◇', subtitle: '任务全生命周期与执行状态管理' },
   { key: 'agvs', label: 'AGV 管理', icon: '▣', subtitle: '车辆状态、电量、载重和位置管理' },
   { key: 'vision', label: '视觉检测', icon: '◍', subtitle: '表面裂纹检测与工件识别（OpenCV 传统算法）' },
+  { key: 'equipment', label: '设备监测', icon: '◈', subtitle: '多变量传感器状态分类、磨损识别与规则告警' },
+  { key: 'forecast', label: '订单预测', icon: '◒', subtitle: '订单需求时间序列回测与未来预测' },
 ]
 
 const currentTab = computed(() => tabs.find((item) => item.key === activeTab.value) || tabs[0])
@@ -107,7 +111,9 @@ onUnmounted(() => {
       <MapView v-else-if="activeTab === 'map'" :map-data="mapData" @notify="handleNotify" />
       <TaskView v-else-if="activeTab === 'tasks'" :tasks="tasks" :nodes="mapData.nodes || []" @refresh="loadAll(true)" @notify="handleNotify" />
       <AgvView v-else-if="activeTab === 'agvs'" :agvs="agvs" @refresh="loadAll(true)" @notify="handleNotify" />
-      <VisionView v-else @notify="handleNotify" />
+      <VisionView v-else-if="activeTab === 'vision'" @notify="handleNotify" />
+      <EquipmentView v-else-if="activeTab === 'equipment'" @notify="handleNotify" />
+      <ForecastView v-else @notify="handleNotify" />
     </main>
 
     <div v-if="loading" class="loading-shade"><div class="spinner"></div></div>

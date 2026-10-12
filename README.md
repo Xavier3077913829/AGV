@@ -183,6 +183,14 @@ npm run build
 | GET | `/api/vision/samples/` | 视觉内置数据集样例列表 |
 | GET | `/api/vision/records/` | 视觉检测记录（支持 `?task_type=` 筛选） |
 | GET | `/api/vision/overview/` | 视觉检测统计概览 |
+| GET | `/api/equipment/overview/` | 设备诊断统计与模型指标 |
+| GET | `/api/equipment/sample/` | 内置设备传感器样例 |
+| POST | `/api/equipment/diagnose/` | 设备状态分类与规则告警 |
+| GET | `/api/equipment/records/` | 设备诊断记录 |
+| GET | `/api/forecast/overview/` | 订单预测统计与最近记录 |
+| GET | `/api/forecast/sample/` | 内置订单需求样例 |
+| POST | `/api/forecast/predict/` | 多模型时间序列预测 |
+| GET | `/api/forecast/runs/` | 历史订单预测记录 |
 
 单台 AGV 多任务顺序优化示例：
 
@@ -343,3 +351,26 @@ C:\Users\ssync\miniconda3\envs\pmp\python.exe manage.py test ManufacturingVision
 ```
 
 实测指标：裂纹检测准确率 **0.8662**、F1 **0.8235**；工件检测 F1 **0.9901**、形状分类准确率 **0.9767**。
+
+## 13. 设备状态监测（任务 6）
+
+由 `EquipmentMonitoring` 应用实现：
+
+- 支持内置正常、磨损、故障样例。
+- 支持上传包含温度、振动、电流、主轴转速和刀具磨损列的 CSV。
+- 使用 `StandardScaler + RandomForestClassifier` 进行分类，并返回置信度和特征重要性。
+- 叠加温度、振动、电流、转速和磨损阈值规则，输出报警信息。
+- 前端显示状态分布、传感器趋势、规则告警和历史诊断记录。
+
+详细说明见 [`EquipmentMonitoring/README.md`](EquipmentMonitoring/README.md)。
+
+## 14. 订单需求预测（任务 7）
+
+由 `DemandForecast` 应用实现：
+
+- 支持移动平均、Holt-Winters、ARIMA 和自动选择模式。
+- 自动模式使用回测集比较 MAE、RMSE 和 MAPE，选择表现最好的模型。
+- 支持上传包含 `date`、`order_count` 的 CSV，也支持内置订单时间序列。
+- 前端显示历史曲线、未来预测曲线、模型对比和预测记录。
+
+详细说明见 [`DemandForecast/README.md`](DemandForecast/README.md)。

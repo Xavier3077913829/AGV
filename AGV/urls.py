@@ -7,6 +7,8 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('SchedulingDecision.urls')),
     path('api/vision/', include('ManufacturingVision.urls')),
+    path('api/equipment/', include('EquipmentMonitoring.urls')),
+    path('api/forecast/', include('DemandForecast.urls')),
 ]
 
 if settings.DEBUG:
