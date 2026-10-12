@@ -51,9 +51,25 @@ const gridYs = computed(() => {
   return Array.from({ length: count + 1 }, (_, index) => extent.value.minY + index)
 })
 
-const hoverTooltipWidth = computed(() => {
-  if (!hoveredNode.value) return 150
-  return Math.max(150, (hoveredNode.value.code.length + hoveredNode.value.name.length) * 7 + 28)
+const hoverTooltip = computed(() => {
+  const node = hoveredNode.value
+  if (!node) return null
+  const label = node.name ? `${node.code} · ${node.name}` : node.code
+  // 11px 字号下全角字符约 11px、半角约 6.4px，再加左右内边距
+  const fullWidth = /[\u2e80-\u9fff\uff00-\uffef]/
+  const textWidth = [...label].reduce(
+    (sum, char) => sum + (fullWidth.test(char) ? 11 : 6.4),
+    0,
+  )
+  const boxWidth = Math.max(150, Math.round(textWidth) + 24)
+  const anchor = point(node.id)
+  return {
+    label,
+    width: boxWidth,
+    // 贴边时向内收，避免 tooltip 被 viewBox 裁掉
+    x: Math.min(Math.max(anchor.x + 12, padding), width - boxWidth - 4),
+    y: Math.min(Math.max(anchor.y - 42, 4), height - 34),
+  }
 })
 
 const startNodeId = ref('')
@@ -152,7 +168,6 @@ function clearPath() {
             <polyline v-for="(route, index) in routes" :key="route.task_id" class="map-route" :class="{ 'route-selected': selectedRoute === route.task_id }" :points="points(route.route?.nodes)" :style="{ stroke: routeColor(index), color: routeColor(index) }" />
             <polyline v-if="pathResult" class="map-route manual-route" :points="points(pathResult.route.nodes)" />
             <g v-for="node in nodes" :key="node.id" class="map-node-group" @mouseenter="hoveredNode = node" @mouseleave="hoveredNode = null">
-              <title>{{ node.code }} · {{ node.name }}</title>
               <circle class="map-node-hit" :cx="point(node.id).x" :cy="point(node.id).y" r="11" />
               <circle class="map-node" :cx="point(node.id).x" :cy="point(node.id).y" :r="node.node_type === 'intersection' ? 3 : 10" :fill="nodeColor(node.node_type)" />
               <text v-if="node.node_type !== 'intersection'" class="map-node-label" :x="point(node.id).x" :y="point(node.id).y + 23" text-anchor="middle">{{ node.code }}</text>
@@ -166,9 +181,9 @@ function clearPath() {
               <circle :cx="point(agv.current_node).x + (index % 2) * 10 - 5" :cy="point(agv.current_node).y - 10 - Math.floor(index / 2) * 10" r="6" fill="#0e8792" stroke="#ffffff" stroke-width="2" />
               <text :x="point(agv.current_node).x + (index % 2) * 10 - 5" :y="point(agv.current_node).y - 28 - Math.floor(index / 2) * 10" text-anchor="middle" fill="#2f6f75" font-size="10">{{ agv.code }}</text>
             </g>
-            <g v-if="hoveredNode" class="map-node-tooltip" pointer-events="none">
-              <rect :x="point(hoveredNode.id).x + 12" :y="point(hoveredNode.id).y - 42" :width="hoverTooltipWidth" height="30" rx="6" />
-              <text :x="point(hoveredNode.id).x + 22" :y="point(hoveredNode.id).y - 23">{{ hoveredNode.code }} · {{ hoveredNode.name }}</text>
+            <g v-if="hoverTooltip" class="map-node-tooltip" pointer-events="none">
+              <rect :x="hoverTooltip.x" :y="hoverTooltip.y" :width="hoverTooltip.width" height="30" rx="6" />
+              <text :x="hoverTooltip.x + 10" :y="hoverTooltip.y + 19">{{ hoverTooltip.label }}</text>
             </g>
           </svg>
         </div>
