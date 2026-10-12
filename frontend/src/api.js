@@ -60,4 +60,21 @@ export const api = {
   deleteVisionRecord: (id) => request(`/vision/records/${id}/`, { method: 'DELETE' }),
   visionSampleImageUrl: (group, name) =>
     `${API_BASE}/vision/samples/${encodeURIComponent(group)}/${encodeURIComponent(name)}/`,
+
+  // --- 设备状态监测（任务 6）---
+  equipmentOverview: () => request('/equipment/overview/'),
+  equipmentSample: (scenario = 'worn') =>
+    request(`/equipment/sample/?scenario=${encodeURIComponent(scenario)}`),
+  equipmentModel: () => request('/equipment/model/'),
+  equipmentDiagnose: (payload) => postVision('/equipment/diagnose/', payload),
+  equipmentRecords: (query = '') => request(`/equipment/records/${query}`).then(unwrap),
+  deleteEquipmentRecord: (id) =>
+    request(`/equipment/records/${id}/`, { method: 'DELETE' }),
+
+  // --- 订单需求预测（任务 7）---
+  forecastOverview: () => request('/forecast/overview/'),
+  forecastSample: (days = 240) => request(`/forecast/sample/?days=${days}`),
+  forecastPredict: (payload) => postVision('/forecast/predict/', payload),
+  forecastRuns: (query = '') => request(`/forecast/runs/${query}`).then(unwrap),
+  deleteForecastRun: (id) => request(`/forecast/runs/${id}/`, { method: 'DELETE' }),
 }

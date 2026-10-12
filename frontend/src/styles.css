@@ -435,7 +435,7 @@ tr:hover td { background: #f8fbfa; }
 .map-grid-line { stroke: rgba(96, 121, 126, 0.18); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .map-node { stroke: #ffffff; stroke-width: 3; }
 .map-node-label { fill: #64777d; font-size: 10px; font-weight: 650; }
-.map-node-hit { fill: transparent; cursor: help; }
+.map-node-hit { fill: transparent; cursor: default; }
 .map-node-group:hover .map-node { stroke: #17353d; stroke-width: 3; }
 .map-node-tooltip rect { fill: #ffffff; stroke: #9db6b1; stroke-width: 1; vector-effect: non-scaling-stroke; filter: drop-shadow(0 4px 9px rgba(20, 45, 54, 0.14)); }
 .map-node-tooltip text { fill: #1a3038; font-size: 11px; font-weight: 650; }
@@ -659,7 +659,8 @@ tr:hover td { background: #f8fbfa; }
     height: auto;
     min-height: 0;
     padding: 12px 14px;
-    overflow: visible;
+    overflow-x: hidden;
+    overflow-y: visible;
     border-right: 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   }
