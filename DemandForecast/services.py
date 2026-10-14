@@ -53,7 +53,6 @@ SERIES_DIR = Path(__file__).resolve().parent.parent / "datasets" / "forecast"
 
 SERIES_SOURCES = {
     "online_retail_daily": "UCI Online Retail 真实交易按天聚合（2010-12 ~ 2011-12，541,909 条交易）",
-    "m3_new_orders": "US Census M3 制造业新订单（月度）",
 }
 
 
@@ -85,15 +84,20 @@ def available_series() -> list[dict]:
     return series_list
 
 
-def load_series(name: str) -> list[dict]:
-    """按名称读取真实订单序列，返回可直接交给 forecast_demand 的记录列表。"""
-    stem = name.strip()
+def _resolve_series_path(name: str) -> Path:
+    """把序列名解析成 datasets/forecast 下的 CSV 路径，拒绝越出目录的名字。"""
+    stem = str(name or "").strip()
     if stem.lower().endswith(".csv"):
         stem = stem[:-4]
-    path = SERIES_DIR / f"{stem}.csv"
-    if not path.is_file():
+    path = (SERIES_DIR / f"{stem}.csv").resolve()
+    if path.parent != SERIES_DIR.resolve() or not path.is_file():
         raise DemandForecastError(f"订单序列不存在：{name}")
-    frame = pd.read_csv(path)
+    return path
+
+
+def load_series(name: str) -> list[dict]:
+    """按名称读取真实订单序列，返回可直接交给 forecast_demand 的记录列表。"""
+    frame = pd.read_csv(_resolve_series_path(name))
     if not {"date", "order_count"}.issubset(frame.columns):
         raise DemandForecastError("订单序列必须包含 date 与 order_count 字段。")
     normalized = _normalize_history(frame)
@@ -284,10 +288,13 @@ def forecast_demand(
     future_values = np.maximum(future_values, 0.0)
 
     last_date = frame["date"].iloc[-1]
+    # 周频的 "W" 锚定在周日，直接用它生成会把未来日期挪到周日（和原始星期几不一致），
+    # 这里改成「距上一期 7 天」，保持序列自身的周期位置。
+    date_freq = "7D" if frequency == "W" else frequency
     future_dates = pd.date_range(
         start=last_date,
         periods=horizon + 1,
-        freq=frequency,
+        freq=date_freq,
     )[1:]
 
     history_payload = [

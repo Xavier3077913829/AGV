@@ -10,7 +10,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import EquipmentDiagnosisRecord
-from .serializers import EquipmentDiagnosisRecordSerializer
+from .serializers import (
+    EquipmentDiagnosisRecordListSerializer,
+    EquipmentDiagnosisRecordSerializer,
+)
 from .services import (
     EquipmentMonitoringError,
     available_datasets,
@@ -43,12 +46,9 @@ def _records_from_request(request) -> tuple[list[dict], str]:
 
     dataset = str(request.data.get("dataset") or "").strip()
     if dataset:
-        try:
-            limit = int(request.data.get("limit") or 0) or None
-        except (TypeError, ValueError):
-            limit = None
+        # 样本数在 services 里收敛到 DATASET_LIMIT_MAX，避免一次取走上万行
         return (
-            load_dataset_records(dataset, limit=limit),
+            load_dataset_records(dataset, limit=request.data.get("limit")),
             EquipmentDiagnosisRecord.Source.DATASET,
         )
 
@@ -77,14 +77,18 @@ class EquipmentOverviewView(APIView):
         average_confidence = (
             EquipmentDiagnosisRecord.objects.aggregate(value=Avg("confidence"))["value"] or 0
         )
+        try:
+            model_metrics = get_model_bundle(source)["metrics"]
+        except EquipmentMonitoringError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(
             {
                 "total": total,
                 "state_counts": state_counts,
                 "average_confidence": round(average_confidence, 4),
-                "model_metrics": get_model_bundle(source)["metrics"],
+                "model_metrics": model_metrics,
                 "available_datasets": available_datasets(),
-                "recent_records": EquipmentDiagnosisRecordSerializer(
+                "recent_records": EquipmentDiagnosisRecordListSerializer(
                     EquipmentDiagnosisRecord.objects.all()[:8],
                     many=True,
                 ).data,
@@ -109,11 +113,9 @@ class EquipmentSampleView(APIView):
         dataset = str(request.query_params.get("dataset") or "").strip()
         if dataset:
             try:
-                limit = int(request.query_params.get("limit") or 0) or None
-            except (TypeError, ValueError):
-                limit = None
-            try:
-                series = load_dataset_records(dataset, limit=limit)
+                series = load_dataset_records(
+                    dataset, limit=request.query_params.get("limit")
+                )
             except EquipmentMonitoringError as exc:
                 return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
             source = next(
@@ -205,6 +207,12 @@ class EquipmentRecordViewSet(
     queryset = EquipmentDiagnosisRecord.objects.all()
     serializer_class = EquipmentDiagnosisRecordSerializer
     ordering_fields = ["created_at", "confidence", "sample_count"]
+
+    def get_serializer_class(self):
+        # 列表接口不返回完整采样序列：一条上万行的记录会把分页响应撑到上百 MB
+        if self.action == "list":
+            return EquipmentDiagnosisRecordListSerializer
+        return EquipmentDiagnosisRecordSerializer
 
     def get_queryset(self):
         queryset = EquipmentDiagnosisRecord.objects.all()

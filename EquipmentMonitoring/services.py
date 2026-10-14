@@ -132,6 +132,11 @@ def generate_training_frame(per_class: int = 320) -> pd.DataFrame:
 
 DATASET_DIR = Path(__file__).resolve().parent.parent / "datasets" / "equipment"
 
+# 单次请求最多抽取多少行真实数据：数据集本身有上万行，不设上限会同时撑爆接口响应、
+# 数据库 JSON 字段和前端表格。
+DATASET_LIMIT_DEFAULT = 200
+DATASET_LIMIT_MAX = 1000
+
 # 真实数据集出处（报告与前端展示用）
 DATASET_SOURCES = {
     "ai4i_equipment": "UCI AI4I 2020 Predictive Maintenance Dataset (CC BY 4.0, DOI 10.24432/C5HS5C)",
@@ -139,8 +144,12 @@ DATASET_SOURCES = {
 }
 
 
+@lru_cache(maxsize=8)
 def available_datasets() -> list[dict]:
-    """列出 datasets/equipment 下可用于训练/演示的真实数据集。"""
+    """列出 datasets/equipment 下可用于训练/演示的真实数据集。
+
+    结果会缓存：新增或替换数据集文件后需要重启进程（与 get_model_bundle 一致）。
+    """
     if not DATASET_DIR.is_dir():
         return []
     datasets = []
@@ -165,15 +174,20 @@ def available_datasets() -> list[dict]:
     return datasets
 
 
-def load_dataset(name: str) -> pd.DataFrame:
-    """按名称读取真实数据集（自动忽略 .csv 后缀）。"""
-    stem = name.strip()
+def _resolve_dataset_path(name: str) -> Path:
+    """把数据集名解析成 datasets/equipment 下的 CSV 路径，拒绝越出目录的名字。"""
+    stem = str(name or "").strip()
     if stem.lower().endswith(".csv"):
         stem = stem[:-4]
-    path = DATASET_DIR / f"{stem}.csv"
-    if not path.is_file():
+    path = (DATASET_DIR / f"{stem}.csv").resolve()
+    if path.parent != DATASET_DIR.resolve() or not path.is_file():
         raise EquipmentMonitoringError(f"数据集不存在：{name}")
-    frame = pd.read_csv(path)
+    return path
+
+
+def load_dataset(name: str) -> pd.DataFrame:
+    """按名称读取真实数据集（自动忽略 .csv 后缀）。"""
+    frame = pd.read_csv(_resolve_dataset_path(name))
     missing = [
         column
         for column in (*FEATURE_COLUMNS, "label")
@@ -184,13 +198,29 @@ def load_dataset(name: str) -> pd.DataFrame:
     return frame
 
 
+def clamp_dataset_limit(limit: object) -> int:
+    """把外部传入的样本数收进 [1, DATASET_LIMIT_MAX]；缺省或非法值用默认值。"""
+    try:
+        value = int(limit)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        value = 0
+    if value <= 0:
+        value = DATASET_LIMIT_DEFAULT
+    return min(value, DATASET_LIMIT_MAX)
+
+
 def load_dataset_records(
-    name: str, limit: int | None = None, seed: int = RANDOM_SEED
+    name: str, limit: object = None, seed: int = RANDOM_SEED
 ) -> list[dict]:
-    """从真实数据集中抽取一段记录，可直接提交给 diagnose_equipment。"""
+    """从真实数据集中抽取一段记录，可直接提交给 diagnose_equipment。
+
+    一次最多取 DATASET_LIMIT_MAX 行：真实数据集有上万行，不设上限会让接口响应、
+    数据库 JSON 字段和前端表格一起被撑爆。
+    """
     frame = load_dataset(name)
-    if limit and 0 < limit < len(frame):
-        frame = frame.sample(limit, random_state=seed)
+    size = clamp_dataset_limit(limit)
+    if size < len(frame):
+        frame = frame.sample(size, random_state=seed)
     columns = [column for column in (*FEATURE_COLUMNS, "label") if column in frame.columns]
     return frame[columns].to_dict(orient="records")
 
@@ -312,6 +342,22 @@ def _rule_alerts(row: pd.Series) -> list[dict]:
     return alerts
 
 
+def _summarize_alerts(alerts: list[dict]) -> list[dict]:
+    """按告警文案去重统计。
+
+    上千行数据里同一句阈值告警会出现几十上百次（例如 AI4I 数据的电流量级使电流告警
+    几乎每行都触发），逐条返回只会刷屏，这里合并成「文案 + 出现次数」。
+    """
+    summary: dict[str, dict] = {}
+    for alert in alerts:
+        item = summary.setdefault(
+            alert["message"],
+            {"level": alert["level"], "message": alert["message"], "count": 0},
+        )
+        item["count"] += 1
+    return sorted(summary.values(), key=lambda item: (-item["count"], item["message"]))
+
+
 def diagnose_equipment(
     records: Iterable[dict],
     equipment_code: str = "CNC-01",
@@ -409,7 +455,7 @@ def diagnose_equipment(
             4,
         ),
         "state_distribution": state_distribution,
-        "rule_alerts": activated_alerts[-12:],
+        "rule_alerts": _summarize_alerts(activated_alerts),
         "feature_summary": feature_summary,
         "feature_importance": bundle["feature_importance"],
         "model_metrics": bundle["metrics"],
