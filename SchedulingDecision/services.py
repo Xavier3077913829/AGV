@@ -624,6 +624,73 @@ def _build_relocate_moves(
     return candidates
 
 
+def _clone_orders(orders: dict[int, list[int]], agv_ids: list[int]) -> dict[int, list[int]]:
+    """复制一份方案，避免候选解修改到当前解。"""
+    return {agv_id: list(orders.get(agv_id, [])) for agv_id in agv_ids}
+
+
+def _build_swap_moves(
+    orders: dict[int, list[int]], agv_ids: list[int]
+) -> list[dict[int, list[int]]]:
+    """邻域 swap：交换两个任务的位置（同一台车内交换，或跨 AGV 交换）。"""
+    candidates: list[dict[int, list[int]]] = []
+    for source_index, source_agv in enumerate(agv_ids):
+        source_order = orders.get(source_agv, [])
+        for first_position, first_task in enumerate(source_order):
+            for target_agv in agv_ids[source_index:]:
+                target_order = orders.get(target_agv, [])
+                for second_position, second_task in enumerate(target_order):
+                    if target_agv == source_agv and second_position <= first_position:
+                        continue
+                    candidate = _clone_orders(orders, agv_ids)
+                    candidate[source_agv][first_position] = second_task
+                    candidate[target_agv][second_position] = first_task
+                    candidates.append(candidate)
+    return candidates
+
+
+def _build_or_opt_moves(
+    orders: dict[int, list[int]], agv_ids: list[int], max_segment: int = 3
+) -> list[dict[int, list[int]]]:
+    """邻域 or-opt：把 2~max_segment 个连续任务整体搬到本车其他位置或其他 AGV。"""
+    candidates: list[dict[int, list[int]]] = []
+    for source_agv in agv_ids:
+        source_order = list(orders.get(source_agv, []))
+        for length in range(2, min(max_segment, len(source_order)) + 1):
+            for start in range(len(source_order) - length + 1):
+                segment = source_order[start : start + length]
+                remaining = source_order[:start] + source_order[start + length :]
+                for target_agv in agv_ids:
+                    base = (
+                        remaining
+                        if target_agv == source_agv
+                        else list(orders.get(target_agv, []))
+                    )
+                    for position in range(len(base) + 1):
+                        if target_agv == source_agv and position == start:
+                            continue
+                        candidate = _clone_orders(orders, agv_ids)
+                        candidate[source_agv] = list(remaining)
+                        candidate[target_agv][position:position] = segment
+                        candidates.append(candidate)
+    return candidates
+
+
+def _build_two_opt_moves(
+    orders: dict[int, list[int]], agv_ids: list[int]
+) -> list[dict[int, list[int]]]:
+    """邻域 2-opt：反转同一台车内一段连续任务的顺序（消除路线交叉）。"""
+    candidates: list[dict[int, list[int]]] = []
+    for agv_id in agv_ids:
+        order = list(orders.get(agv_id, []))
+        for start in range(len(order) - 1):
+            for end in range(start + 2, len(order) + 1):
+                candidate = _clone_orders(orders, agv_ids)
+                candidate[agv_id][start:end] = reversed(candidate[agv_id][start:end])
+                candidates.append(candidate)
+    return candidates
+
+
 def improve_solution_vns(
     initial: ScheduleEvaluation,
     tasks: dict[int, TransportTask],
@@ -634,17 +701,30 @@ def improve_solution_vns(
     max_rounds: int = 50,
     max_neighbors: int = 350,
 ) -> tuple[ScheduleEvaluation, int]:
-    """变邻域局部搜索：不断执行跨 AGV/序列位置迁移，直到无法改进。"""
+    """变邻域下降（VND）：交替使用 relocate / swap / or-opt / 2-opt 四种邻域。
+
+    - 任一邻域找到改进（首次改进即接受）就回到第一个邻域重新搜索；
+    - 四个邻域都无法改进时结束；
+    - 邻居数超过 max_neighbors 时按固定种子随机采样，保证结果可复现。
+    """
     current = initial
     iterations = 0
     rng = random.Random(20260928)
     task_ids = list(tasks)
     agv_ids = [agv.id for agv in agvs]
+    builders = (
+        lambda orders: _build_relocate_moves(orders, task_ids, agv_ids),
+        lambda orders: _build_swap_moves(orders, agv_ids),
+        lambda orders: _build_or_opt_moves(orders, agv_ids),
+        lambda orders: _build_two_opt_moves(orders, agv_ids),
+    )
 
-    for _round in range(max_rounds):
-        moves = _build_relocate_moves(current.orders, task_ids, agv_ids)
-        if not moves:
-            break
+    rounds = 0
+    stalled = 0
+    neighborhood = 0
+    while rounds < max_rounds and stalled < len(builders):
+        rounds += 1
+        moves = builders[neighborhood](current.orders)
         if len(moves) > max_neighbors:
             moves = rng.sample(moves, max_neighbors)
         improved = False
@@ -655,8 +735,12 @@ def improve_solution_vns(
                 current = evaluation
                 improved = True
                 break
-        if not improved:
-            break
+        if improved:
+            neighborhood = 0
+            stalled = 0
+        else:
+            neighborhood = (neighborhood + 1) % len(builders)
+            stalled += 1
     return current, iterations
 
 def optimize_single_solution(
@@ -705,7 +789,7 @@ def optimize_multi_solution(
     now: datetime,
     weights: dict[str, float] | None = None,
 ) -> tuple[ScheduleEvaluation, ScheduleEvaluation, int]:
-    """最优插入初始化 + 变邻域搜索的多 AGV 联合优化。"""
+    """最优插入初始化 + 变邻域下降（relocate/swap/or-opt/2-opt）的多 AGV 联合优化。"""
     task_map = {task.id: task for task in tasks}
     baseline = build_baseline_solution(tasks, agvs, router, now, weights)
     initial = build_insertion_solution(tasks, agvs, router, now, weights)

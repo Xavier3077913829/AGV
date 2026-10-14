@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
+from pathlib import Path
 from typing import Iterable
 
 import numpy as np
@@ -129,10 +130,79 @@ def generate_training_frame(per_class: int = 320) -> pd.DataFrame:
     return result.sample(frac=1.0, random_state=RANDOM_SEED).reset_index(drop=True)
 
 
-@lru_cache(maxsize=1)
-def get_model_bundle() -> dict:
-    """训练并缓存随机森林分类器。"""
-    frame = generate_training_frame()
+DATASET_DIR = Path(__file__).resolve().parent.parent / "datasets" / "equipment"
+
+# 真实数据集出处（报告与前端展示用）
+DATASET_SOURCES = {
+    "ai4i_equipment": "UCI AI4I 2020 Predictive Maintenance Dataset (CC BY 4.0, DOI 10.24432/C5HS5C)",
+    "phm2012_equipment": "FEMTO-ST / IEEE PHM 2012 Data Challenge 轴承全寿命数据",
+}
+
+
+def available_datasets() -> list[dict]:
+    """列出 datasets/equipment 下可用于训练/演示的真实数据集。"""
+    if not DATASET_DIR.is_dir():
+        return []
+    datasets = []
+    for path in sorted(DATASET_DIR.glob("*.csv")):
+        try:
+            frame = pd.read_csv(path)
+        except Exception:  # noqa: BLE001 - 坏文件直接跳过，不影响其他数据集
+            continue
+        label_counts = (
+            frame["label"].value_counts().to_dict() if "label" in frame.columns else {}
+        )
+        datasets.append(
+            {
+                "name": path.stem,
+                "file": path.name,
+                "rows": int(len(frame)),
+                "columns": list(frame.columns),
+                "label_counts": {str(key): int(value) for key, value in label_counts.items()},
+                "source": DATASET_SOURCES.get(path.stem, "本地数据集"),
+            }
+        )
+    return datasets
+
+
+def load_dataset(name: str) -> pd.DataFrame:
+    """按名称读取真实数据集（自动忽略 .csv 后缀）。"""
+    stem = name.strip()
+    if stem.lower().endswith(".csv"):
+        stem = stem[:-4]
+    path = DATASET_DIR / f"{stem}.csv"
+    if not path.is_file():
+        raise EquipmentMonitoringError(f"数据集不存在：{name}")
+    frame = pd.read_csv(path)
+    missing = [
+        column
+        for column in (*FEATURE_COLUMNS, "label")
+        if column not in frame.columns
+    ]
+    if missing:
+        raise EquipmentMonitoringError("数据集缺少字段：" + "、".join(missing))
+    return frame
+
+
+def load_dataset_records(
+    name: str, limit: int | None = None, seed: int = RANDOM_SEED
+) -> list[dict]:
+    """从真实数据集中抽取一段记录，可直接提交给 diagnose_equipment。"""
+    frame = load_dataset(name)
+    if limit and 0 < limit < len(frame):
+        frame = frame.sample(limit, random_state=seed)
+    columns = [column for column in (*FEATURE_COLUMNS, "label") if column in frame.columns]
+    return frame[columns].to_dict(orient="records")
+
+
+@lru_cache(maxsize=4)
+def get_model_bundle(source: str = "synthetic") -> dict:
+    """训练并缓存随机森林分类器。
+
+    source="synthetic" 使用内置合成数据；其他取值读取 datasets/equipment/<source>.csv
+    作为训练数据（例如 "ai4i_equipment"）。
+    """
+    frame = generate_training_frame() if source == "synthetic" else load_dataset(source)
     features = frame[FEATURE_COLUMNS]
     target = frame["label"]
 
@@ -182,12 +252,18 @@ def get_model_bundle() -> dict:
     return {
         "model": model,
         "features": FEATURE_COLUMNS,
+        "data_source": source,
         "feature_importance": feature_importance,
         "metrics": {
             "accuracy": round(float(accuracy_score(test_target, predictions)), 4),
             "f1_macro": round(float(f1_score(test_target, predictions, average="macro")), 4),
             "training_samples": len(train_features),
             "validation_samples": len(test_features),
+            "data_source": source,
+            "dataset_rows": int(len(frame)),
+            "label_counts": {
+                str(key): int(value) for key, value in frame["label"].value_counts().items()
+            },
             "classification_report": classification_report(
                 test_target,
                 predictions,
@@ -239,10 +315,15 @@ def _rule_alerts(row: pd.Series) -> list[dict]:
 def diagnose_equipment(
     records: Iterable[dict],
     equipment_code: str = "CNC-01",
+    data_source: str = "synthetic",
 ) -> dict:
-    """对多变量传感器序列进行分类，并返回规则告警与可视化数据。"""
+    """对多变量传感器序列进行分类，并返回规则告警与可视化数据。
+
+    data_source 决定使用哪套训练数据：默认内置合成数据，也可传真实数据集名
+    （例如 "ai4i_equipment"，对应 datasets/equipment/ai4i_equipment.csv）。
+    """
     frame = _normalize_records(records)
-    bundle = get_model_bundle()
+    bundle = get_model_bundle(data_source)
     model = bundle["model"]
 
     feature_frame = frame[FEATURE_COLUMNS]

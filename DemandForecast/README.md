@@ -35,3 +35,31 @@ CSV 或 JSON 序列必须包含：
 ```
 
 上传 CSV 时使用 multipart 字段 `file`，并同时提交 `horizon` 和 `model`。
+
+## 真实数据集（可选）
+
+`datasets/forecast/` 下可放入真实订单序列 CSV（字段 `date, order_count`），模块会自动识别：
+
+- `online_retail_daily.csv`：UCI Online Retail 真实交易按天聚合的订单量（374 天，2010-12 ~ 2011-12）。
+
+```json
+GET  /api/forecast/series/                              // 列出可用真实序列
+GET  /api/forecast/sample/?series=online_retail_daily    // 查看真实序列
+POST /api/forecast/predict/  {"series": "online_retail_daily", "horizon": 14, "model": "auto"}
+```
+
+不传 `series` 时仍使用内置合成序列，原有行为不变。
+
+**采样频率自适应**：预测前会根据相邻日期间隔自动推断频率与季节周期
+（日 → 周期 7、周 → 周期 52/4、月 → 周期 12），并据此选择移动平均窗口与 Holt-Winters 季节周期；
+返回值中新增 `frequency`、`seasonal_period`、`ma_window` 字段，便于核对。
+
+**实测对比（真实数据 vs 合成数据，horizon=14）**
+
+| 数据 | 移动平均 MAPE | Holt-Winters MAPE | ARIMA MAPE | auto 选中 |
+| --- | --- | --- | --- | --- |
+| 内置合成序列 | 约 5%~10% | 约 5%~10% | 约 5%~10% | 视数据而定 |
+| **Online Retail 真实日订单** | 35.30% | **24.32%** | 32.71% | **Holt-Winters** |
+
+> 真实数据误差明显高于合成数据属于正常现象；报告中应如实呈现，并说明可引入外生变量或换用 Prophet/LightGBM 进一步改进。
+> 详见 [`datasets/forecast/README.md`](../datasets/forecast/README.md)。

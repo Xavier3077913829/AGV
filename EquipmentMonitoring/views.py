@@ -13,9 +13,11 @@ from .models import EquipmentDiagnosisRecord
 from .serializers import EquipmentDiagnosisRecordSerializer
 from .services import (
     EquipmentMonitoringError,
+    available_datasets,
     diagnose_equipment,
     generate_demo_series,
     get_model_bundle,
+    load_dataset_records,
 )
 
 
@@ -39,6 +41,17 @@ def _records_from_request(request) -> tuple[list[dict], str]:
             raise EquipmentMonitoringError("records 必须是数组。")
         return raw_records, EquipmentDiagnosisRecord.Source.MANUAL
 
+    dataset = str(request.data.get("dataset") or "").strip()
+    if dataset:
+        try:
+            limit = int(request.data.get("limit") or 0) or None
+        except (TypeError, ValueError):
+            limit = None
+        return (
+            load_dataset_records(dataset, limit=limit),
+            EquipmentDiagnosisRecord.Source.DATASET,
+        )
+
     scenario = str(request.data.get("sample") or request.data.get("scenario") or "")
     if scenario:
         return (
@@ -47,13 +60,14 @@ def _records_from_request(request) -> tuple[list[dict], str]:
         )
 
     raise EquipmentMonitoringError(
-        "请提供 records 数组、CSV 文件，或 sample=normal/worn/fault。"
+        "请提供 records 数组、CSV 文件，或 sample=normal/worn/fault、dataset=ai4i_equipment。"
     )
 
 
 class EquipmentOverviewView(APIView):
     def get(self, request):
         total = EquipmentDiagnosisRecord.objects.count()
+        source = str(request.query_params.get("data_source") or "synthetic")
         state_counts = {
             item["predicted_state"]: item["count"]
             for item in EquipmentDiagnosisRecord.objects.values("predicted_state").annotate(
@@ -68,7 +82,8 @@ class EquipmentOverviewView(APIView):
                 "total": total,
                 "state_counts": state_counts,
                 "average_confidence": round(average_confidence, 4),
-                "model_metrics": get_model_bundle()["metrics"],
+                "model_metrics": get_model_bundle(source)["metrics"],
+                "available_datasets": available_datasets(),
                 "recent_records": EquipmentDiagnosisRecordSerializer(
                     EquipmentDiagnosisRecord.objects.all()[:8],
                     many=True,
@@ -77,8 +92,44 @@ class EquipmentOverviewView(APIView):
         )
 
 
+class EquipmentDatasetView(APIView):
+    """列出 datasets/equipment 下的真实数据集（来源、规模、标签分布）。"""
+
+    def get(self, request):
+        return Response(
+            {
+                "datasets": available_datasets(),
+                "hint": "在 /api/equipment/sample/?dataset=<name>&limit=200 取样本，或给 /api/equipment/diagnose/ 传 dataset 与 data_source。",
+            }
+        )
+
+
 class EquipmentSampleView(APIView):
     def get(self, request):
+        dataset = str(request.query_params.get("dataset") or "").strip()
+        if dataset:
+            try:
+                limit = int(request.query_params.get("limit") or 0) or None
+            except (TypeError, ValueError):
+                limit = None
+            try:
+                series = load_dataset_records(dataset, limit=limit)
+            except EquipmentMonitoringError as exc:
+                return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            source = next(
+                (item["source"] for item in available_datasets() if item["name"] == dataset),
+                "本地数据集",
+            )
+            return Response(
+                {
+                    "dataset": dataset,
+                    "source": source,
+                    "sample_count": len(series),
+                    "series": series,
+                    "hint": "真实数据集样本；可直接提交到 /api/equipment/diagnose/ 的 records 字段（建议同时传 data_source）。",
+                }
+            )
+
         scenario = str(request.query_params.get("scenario", "worn"))
         series = generate_demo_series(scenario=scenario)
         return Response(
@@ -93,13 +144,19 @@ class EquipmentSampleView(APIView):
 
 class EquipmentModelView(APIView):
     def get(self, request):
-        bundle = get_model_bundle()
+        source = str(request.query_params.get("data_source") or "synthetic")
+        try:
+            bundle = get_model_bundle(source)
+        except EquipmentMonitoringError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(
             {
                 "algorithm": "StandardScaler + RandomForestClassifier",
+                "data_source": source,
                 "features": bundle["features"],
                 "feature_importance": bundle["feature_importance"],
                 "metrics": bundle["metrics"],
+                "available_datasets": available_datasets(),
             }
         )
 
@@ -111,7 +168,10 @@ class EquipmentDiagnoseView(APIView):
         try:
             records, source = _records_from_request(request)
             equipment_code = str(request.data.get("equipment_code") or "CNC-01")
-            result = diagnose_equipment(records, equipment_code=equipment_code)
+            data_source = str(request.data.get("data_source") or "synthetic")
+            result = diagnose_equipment(
+                records, equipment_code=equipment_code, data_source=data_source
+            )
         except EquipmentMonitoringError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 

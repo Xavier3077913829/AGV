@@ -15,8 +15,10 @@ from .services import (
     ALL_MODELS,
     MODEL_LABELS,
     DemandForecastError,
+    available_series,
     forecast_demand,
     generate_order_series,
+    load_series,
 )
 
 
@@ -40,6 +42,12 @@ def _history_from_request(request) -> tuple[list[dict], str]:
             raise DemandForecastError("history 必须是数组。")
         return raw_history, DemandForecastRun.Source.MANUAL
 
+    series_name = str(
+        request.data.get("series") or request.query_params.get("series") or ""
+    ).strip()
+    if series_name:
+        return load_series(series_name), DemandForecastRun.Source.DATASET
+
     return generate_order_series(), DemandForecastRun.Source.DATASET
 
 
@@ -62,6 +70,7 @@ class ForecastOverviewView(APIView):
                         for name in ALL_MODELS
                     ],
                 ],
+                "available_series": available_series(),
                 "recent_runs": DemandForecastRunSerializer(
                     DemandForecastRun.objects.all()[:8],
                     many=True,
@@ -70,15 +79,48 @@ class ForecastOverviewView(APIView):
         )
 
 
+class ForecastSeriesView(APIView):
+    """列出 datasets/forecast 下可用的真实订单序列。"""
+
+    def get(self, request):
+        return Response(
+            {
+                "series": available_series(),
+                "hint": "用 /api/forecast/sample/?series=<name> 查看数据，或在 /api/forecast/predict/ 里传 series=<name> 直接预测。",
+            }
+        )
+
+
 class ForecastSampleView(APIView):
     def get(self, request):
+        name = str(request.query_params.get("series") or "").strip()
+        if name:
+            try:
+                series = load_series(name)
+            except DemandForecastError as exc:
+                return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            source = next(
+                (item["source"] for item in available_series() if item["name"] == name),
+                "本地数据集",
+            )
+            return Response(
+                {
+                    "series_name": name,
+                    "source": source,
+                    "days": len(series),
+                    "series": series,
+                    "hint": "真实数据集序列；可作为 history 提交，或直接给 /api/forecast/predict/ 传 series 参数。",
+                }
+            )
+
         days = int(request.query_params.get("days", 240))
         series = generate_order_series(days=days)
         return Response(
             {
+                "series_name": "synthetic",
                 "days": len(series),
                 "series": series,
-                "hint": "可将该序列作为 history 字段提交到 /api/forecast/predict/。",
+                "hint": "内置合成演示序列；可将该序列作为 history 字段提交到 /api/forecast/predict/。",
             }
         )
 

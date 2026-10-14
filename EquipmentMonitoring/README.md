@@ -38,3 +38,33 @@
 ```
 
 上传 CSV 时使用 multipart 字段 `file`。
+
+## 真实数据集（可选）
+
+`datasets/equipment/` 下可放入真实数据集 CSV（字段同上，另加 `label` 列），模块会自动识别：
+
+- `ai4i_equipment.csv`：由 UCI AI4I 2020 数据集转换（10,000 行，标签 `normal/worn/fault`）。
+
+```json
+// 用真实数据集训练并查看指标
+GET  /api/equipment/model/?data_source=ai4i_equipment
+// 列出可用数据集
+GET  /api/equipment/datasets/
+// 取真实数据样本（可直接喂给 /diagnose/）
+GET  /api/equipment/sample/?dataset=ai4i_equipment&limit=200
+// 用真实数据训练出的模型做诊断
+POST /api/equipment/diagnose/  {"dataset": "ai4i_equipment", "limit": 200, "data_source": "ai4i_equipment"}
+```
+
+不传 `data_source` 时仍使用内置合成数据训练，原有行为不变。
+
+**实测对比（同一套模型代码）**
+
+| 训练数据 | accuracy | F1 (macro) | 说明 |
+| --- | --- | --- | --- |
+| 内置合成数据 | 0.99+ | 0.99+ | 三类样本充足、分离度大 |
+| AI4I 真实标签数据 | **0.8984** | **0.5042** | `worn` 仅 46 条样本，F1 仅 0.106 |
+
+> 报告建议同时列出两套指标，说明**类别不平衡对真实数据的影响**；`ai4i_equipment.csv` 的
+> `current_a` 为派生特征、`vibration_mm_s` 为派生代理，规则阈值需按现场重新标定。
+> 详见 [`datasets/equipment/README.md`](../datasets/equipment/README.md)。
