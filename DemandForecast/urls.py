@@ -6,6 +6,7 @@ from .views import (
     ForecastPredictView,
     ForecastRunViewSet,
     ForecastSampleView,
+    ForecastSeriesView,
 )
 
 
@@ -16,5 +17,6 @@ urlpatterns = [
     path("", include(router.urls)),
     path("overview/", ForecastOverviewView.as_view(), name="forecast-overview"),
     path("sample/", ForecastSampleView.as_view(), name="forecast-sample"),
+    path("series/", ForecastSeriesView.as_view(), name="forecast-series"),
     path("predict/", ForecastPredictView.as_view(), name="forecast-predict"),
 ]

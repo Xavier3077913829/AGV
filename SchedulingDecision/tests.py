@@ -1,14 +1,22 @@
+from types import SimpleNamespace
+from unittest import mock
+
 from django.core.management import call_command
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from rest_framework.test import APIClient
 
 from .models import AGV, DispatchRecord, MapNode, ScheduleRun, TransportTask
 from .services import (
     SchedulingError,
+    _build_or_opt_moves,
+    _build_relocate_moves,
+    _build_swap_moves,
+    _build_two_opt_moves,
     complete_task,
     dispatch_batch,
     dispatch_single,
     dispatch_single_sequence,
+    improve_solution_vns,
     start_task,
 )
 
@@ -157,3 +165,91 @@ class APITests(TestCase):
         self.assertEqual(response.data["run"]["task_count"], 6)
         self.assertGreaterEqual(response.data["run"]["agv_count"], 2)
         self.assertTrue(response.data["evaluation"]["feasible"])
+
+
+class NeighborhoodTests(SimpleTestCase):
+    """变邻域算子与变邻域下降的纯逻辑测试（不需要数据库）。"""
+
+    AGV_IDS = [1, 2, 3]
+    TASK_IDS = [101, 102, 103, 104, 105, 106]
+    INITIAL_ORDERS = {1: [101, 102, 103], 2: [104], 3: [105, 106]}
+
+    def _assert_task_multiset_preserved(self, candidate):
+        """每个任务必须出现且只出现一次（所有邻域都不能丢任务或复制任务）。"""
+        flattened = [task_id for order in candidate.values() for task_id in order]
+        self.assertEqual(len(flattened), len(self.TASK_IDS))
+        self.assertEqual(sorted(flattened), sorted(self.TASK_IDS))
+
+    def test_relocate_moves_preserve_tasks(self):
+        moves = _build_relocate_moves(self.INITIAL_ORDERS, self.TASK_IDS, self.AGV_IDS)
+        self.assertGreater(len(moves), 0)
+        for candidate in moves:
+            self._assert_task_multiset_preserved(candidate)
+
+    def test_swap_moves_preserve_tasks(self):
+        moves = _build_swap_moves(self.INITIAL_ORDERS, self.AGV_IDS)
+        self.assertGreater(len(moves), 0)
+        for candidate in moves:
+            self._assert_task_multiset_preserved(candidate)
+
+    def test_or_opt_moves_preserve_tasks(self):
+        moves = _build_or_opt_moves(self.INITIAL_ORDERS, self.AGV_IDS)
+        self.assertGreater(len(moves), 0)
+        for candidate in moves:
+            self._assert_task_multiset_preserved(candidate)
+
+    def test_two_opt_moves_preserve_tasks(self):
+        moves = _build_two_opt_moves(self.INITIAL_ORDERS, self.AGV_IDS)
+        self.assertGreater(len(moves), 0)
+        for candidate in moves:
+            self._assert_task_multiset_preserved(candidate)
+
+    def test_vns_reduces_objective_and_is_reproducible(self):
+        """构造一个距离矩阵，验证 VND 能下降目标值，并且同种子结果一致。"""
+
+        def cost(orders):
+            total = 0.0
+            for agv_id, order in orders.items():
+                if not order:
+                    continue
+                total += 2.0 * agv_id + 3.0 * order[0]  # 起点成本
+                for first, second in zip(order, order[1:]):
+                    total += abs(first - second) * 1.5  # 任务间转移成本
+            return total
+
+        def fake_evaluate(tasks, agvs, orders, router, now, weights=None, **kwargs):
+            normalized = {int(key): list(value) for key, value in orders.items()}
+            flattened = [task_id for order in normalized.values() for task_id in order]
+            feasible = sorted(flattened) == sorted(self.TASK_IDS)
+            return SimpleNamespace(
+                feasible=feasible,
+                objective=cost(normalized) if feasible else float("inf"),
+                orders=normalized,
+            )
+
+        initial_orders = {agv_id: list(order) for agv_id, order in self.INITIAL_ORDERS.items()}
+        initial = SimpleNamespace(
+            feasible=True, objective=cost(initial_orders), orders=initial_orders
+        )
+        agvs = [SimpleNamespace(id=agv_id) for agv_id in self.AGV_IDS]
+        tasks = {task_id: None for task_id in self.TASK_IDS}
+
+        with mock.patch("SchedulingDecision.services.evaluate_solution", fake_evaluate):
+            first, iterations = improve_solution_vns(initial, tasks, agvs, None, None)
+            second, _ = improve_solution_vns(
+                SimpleNamespace(
+                    feasible=True,
+                    objective=cost({k: list(v) for k, v in self.INITIAL_ORDERS.items()}),
+                    orders={k: list(v) for k, v in self.INITIAL_ORDERS.items()},
+                ),
+                tasks,
+                agvs,
+                None,
+                None,
+            )
+
+        self.assertTrue(first.feasible)
+        self.assertLess(first.objective, initial.objective)  # 目标值必须下降
+        self.assertGreater(iterations, 0)  # 迭代次数被记录
+        self.assertEqual(first.orders, second.orders)  # 固定种子 → 结果可复现
+        self._assert_task_multiset_preserved(first.orders)

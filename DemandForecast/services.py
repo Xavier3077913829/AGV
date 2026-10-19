@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import warnings
 from math import sqrt
+from pathlib import Path
 from typing import Iterable
 
 import numpy as np
@@ -48,6 +49,83 @@ def generate_order_series(days: int = 240, seed: int = RANDOM_SEED) -> list[dict
     ]
 
 
+SERIES_DIR = Path(__file__).resolve().parent.parent / "datasets" / "forecast"
+
+SERIES_SOURCES = {
+    "online_retail_daily": "UCI Online Retail 真实交易按天聚合（2010-12 ~ 2011-12，541,909 条交易）",
+}
+
+
+def available_series() -> list[dict]:
+    """列出 datasets/forecast 下可直接预测的真实订单序列。"""
+    if not SERIES_DIR.is_dir():
+        return []
+    series_list = []
+    for path in sorted(SERIES_DIR.glob("*.csv")):
+        try:
+            frame = pd.read_csv(path)
+        except Exception:  # noqa: BLE001 - 坏文件跳过，不影响其他序列
+            continue
+        if not {"date", "order_count"}.issubset(frame.columns) or frame.empty:
+            continue
+        values = pd.to_numeric(frame["order_count"], errors="coerce")
+        series_list.append(
+            {
+                "name": path.stem,
+                "file": path.name,
+                "points": int(len(frame)),
+                "start": str(frame["date"].iloc[0]),
+                "end": str(frame["date"].iloc[-1]),
+                "total": float(values.sum()),
+                "mean": round(float(values.mean()), 2),
+                "source": SERIES_SOURCES.get(path.stem, "本地数据集"),
+            }
+        )
+    return series_list
+
+
+def _resolve_series_path(name: str) -> Path:
+    """把序列名解析成 datasets/forecast 下的 CSV 路径，拒绝越出目录的名字。"""
+    stem = str(name or "").strip()
+    if stem.lower().endswith(".csv"):
+        stem = stem[:-4]
+    path = (SERIES_DIR / f"{stem}.csv").resolve()
+    if path.parent != SERIES_DIR.resolve() or not path.is_file():
+        raise DemandForecastError(f"订单序列不存在：{name}")
+    return path
+
+
+def load_series(name: str) -> list[dict]:
+    """按名称读取真实订单序列，返回可直接交给 forecast_demand 的记录列表。"""
+    frame = pd.read_csv(_resolve_series_path(name))
+    if not {"date", "order_count"}.issubset(frame.columns):
+        raise DemandForecastError("订单序列必须包含 date 与 order_count 字段。")
+    normalized = _normalize_history(frame)
+    return [
+        {"date": row.date.strftime("%Y-%m-%d"), "order_count": round(float(row.order_count), 2)}
+        for row in normalized.itertuples(index=False)
+    ]
+
+
+def _infer_frequency(frame: pd.DataFrame) -> tuple[str, int, int]:
+    """按相邻日期间隔推断 (pandas 频率, 季节周期, 移动平均窗口)。
+
+    日数据 → 周周期 7；周数据 → 年周期 52（样本不足退回 4）；月数据 → 年周期 12。
+    """
+    if len(frame) < 3:
+        return "D", 7, 7
+    step = float(frame["date"].diff().dt.days.dropna().median())
+    if step <= 2:
+        return "D", 7, 7
+    if step <= 10:
+        return "W", (52 if len(frame) >= 104 else 4), 4
+    if 25 <= step <= 35:
+        return "MS", (12 if len(frame) >= 24 else 4), 3
+    if 80 <= step <= 100:
+        return "QS", 4, 4
+    return "D", 7, 7
+
+
 def _normalize_history(history: Iterable[dict] | pd.DataFrame) -> pd.DataFrame:
     frame = history.copy() if isinstance(history, pd.DataFrame) else pd.DataFrame(list(history))
     if frame.empty:
@@ -64,9 +142,11 @@ def _normalize_history(history: Iterable[dict] | pd.DataFrame) -> pd.DataFrame:
     return normalized.reset_index(drop=True)
 
 
-def _moving_average_forecast(values: np.ndarray, horizon: int) -> np.ndarray:
+def _moving_average_forecast(
+    values: np.ndarray, horizon: int, window: int | None = None
+) -> np.ndarray:
     history = [float(value) for value in values]
-    window = min(7, len(history))
+    window = min(window or 7, len(history))
     result = []
     for _ in range(horizon):
         forecast = float(np.mean(history[-window:]))
@@ -75,15 +155,19 @@ def _moving_average_forecast(values: np.ndarray, horizon: int) -> np.ndarray:
     return np.asarray(result, dtype=float)
 
 
-def _holt_winters_forecast(values: np.ndarray, horizon: int) -> np.ndarray:
+def _holt_winters_forecast(
+    values: np.ndarray, horizon: int, seasonal_period: int = 7
+) -> np.ndarray:
     series = pd.Series(values, dtype=float)
+    period = max(2, int(seasonal_period))
+    use_seasonal = len(series) >= 2 * period
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         model = ExponentialSmoothing(
             series,
             trend="add",
-            seasonal="add",
-            seasonal_periods=7,
+            seasonal="add" if use_seasonal else None,
+            seasonal_periods=period if use_seasonal else None,
             initialization_method="estimated",
         )
         fitted = model.fit(optimized=True)
@@ -105,11 +189,17 @@ def _arima_forecast(values: np.ndarray, horizon: int) -> np.ndarray:
     return np.asarray(forecast, dtype=float)
 
 
-def _fit_forecast(model_name: str, values: np.ndarray, horizon: int) -> np.ndarray:
+def _fit_forecast(
+    model_name: str,
+    values: np.ndarray,
+    horizon: int,
+    seasonal_period: int = 7,
+    ma_window: int | None = None,
+) -> np.ndarray:
     if model_name == "moving_average":
-        return _moving_average_forecast(values, horizon)
+        return _moving_average_forecast(values, horizon, ma_window)
     if model_name == "holt_winters":
-        return _holt_winters_forecast(values, horizon)
+        return _holt_winters_forecast(values, horizon, seasonal_period)
     if model_name == "arima":
         return _arima_forecast(values, horizon)
     raise DemandForecastError(f"未知预测模型：{model_name}")
@@ -153,6 +243,7 @@ def forecast_demand(
         )
 
     values = frame["order_count"].to_numpy(dtype=float)
+    frequency, seasonal_period, ma_window = _infer_frequency(frame)
     validation_horizon = min(max(horizon, 7), max(7, len(values) // 5))
     train_values = values[:-validation_horizon]
     actual_values = values[-validation_horizon:]
@@ -162,7 +253,9 @@ def forecast_demand(
     candidates = {}
     for candidate in candidate_models:
         try:
-            predicted = _fit_forecast(candidate, train_values, validation_horizon)
+            predicted = _fit_forecast(
+                candidate, train_values, validation_horizon, seasonal_period, ma_window
+            )
             if len(predicted) != validation_horizon or not np.all(np.isfinite(predicted)):
                 raise ValueError("forecast contains invalid values")
             candidates[candidate] = _metrics(actual_values, predicted)
@@ -189,15 +282,20 @@ def forecast_demand(
             valid_candidates[name]["mape"],
         ),
     )
-    future_values = _fit_forecast(selected_model, values, horizon)
+    future_values = _fit_forecast(
+        selected_model, values, horizon, seasonal_period, ma_window
+    )
     future_values = np.maximum(future_values, 0.0)
 
     last_date = frame["date"].iloc[-1]
+    # 周频的 "W" 锚定在周日，直接用它生成会把未来日期挪到周日（和原始星期几不一致），
+    # 这里改成「距上一期 7 天」，保持序列自身的周期位置。
+    date_freq = "7D" if frequency == "W" else frequency
     future_dates = pd.date_range(
-        last_date + pd.Timedelta(days=1),
-        periods=horizon,
-        freq="D",
-    )
+        start=last_date,
+        periods=horizon + 1,
+        freq=date_freq,
+    )[1:]
 
     history_payload = [
         {
@@ -221,6 +319,9 @@ def forecast_demand(
         "model_requested": model,
         "horizon": horizon,
         "history_count": len(frame),
+        "frequency": frequency,
+        "seasonal_period": seasonal_period,
+        "ma_window": ma_window,
         "predicted_total": round(float(np.sum(future_values)), 2),
         "metrics": selected_metrics,
         "candidate_metrics": candidates,

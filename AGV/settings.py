@@ -15,7 +15,8 @@ def _load_dotenv(path: Path) -> None:
     """
     if not path.is_file():
         return
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
+    # 用 utf-8-sig 读取：兼容 Windows 记事本 / PowerShell 5.1 生成的带 BOM 文件
+    for raw_line in path.read_text(encoding="utf-8-sig").splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
@@ -97,6 +98,16 @@ DATABASES = {
         },
     }
 }
+
+# 数据库开关：在 .env 里写 DB_ENGINE=sqlite 即可改用 SQLite（无需安装/配置 MySQL），
+# 适合本地快速运行与演示；需要正式数据库时删掉该行（默认走 MySQL）。
+if os.environ.get("DB_ENGINE", "mysql").strip().lower() == "sqlite":
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

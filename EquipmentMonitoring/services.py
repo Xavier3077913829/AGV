@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
+from pathlib import Path
 from typing import Iterable
 
 import numpy as np
@@ -129,10 +130,109 @@ def generate_training_frame(per_class: int = 320) -> pd.DataFrame:
     return result.sample(frac=1.0, random_state=RANDOM_SEED).reset_index(drop=True)
 
 
-@lru_cache(maxsize=1)
-def get_model_bundle() -> dict:
-    """训练并缓存随机森林分类器。"""
-    frame = generate_training_frame()
+DATASET_DIR = Path(__file__).resolve().parent.parent / "datasets" / "equipment"
+
+# 单次请求最多抽取多少行真实数据：数据集本身有上万行，不设上限会同时撑爆接口响应、
+# 数据库 JSON 字段和前端表格。
+DATASET_LIMIT_DEFAULT = 200
+DATASET_LIMIT_MAX = 1000
+
+# 真实数据集出处（报告与前端展示用）
+DATASET_SOURCES = {
+    "ai4i_equipment": "UCI AI4I 2020 Predictive Maintenance Dataset (CC BY 4.0, DOI 10.24432/C5HS5C)",
+    "phm2012_equipment": "FEMTO-ST / IEEE PHM 2012 Data Challenge 轴承全寿命数据",
+}
+
+
+@lru_cache(maxsize=8)
+def available_datasets() -> list[dict]:
+    """列出 datasets/equipment 下可用于训练/演示的真实数据集。
+
+    结果会缓存：新增或替换数据集文件后需要重启进程（与 get_model_bundle 一致）。
+    """
+    if not DATASET_DIR.is_dir():
+        return []
+    datasets = []
+    for path in sorted(DATASET_DIR.glob("*.csv")):
+        try:
+            frame = pd.read_csv(path)
+        except Exception:  # noqa: BLE001 - 坏文件直接跳过，不影响其他数据集
+            continue
+        label_counts = (
+            frame["label"].value_counts().to_dict() if "label" in frame.columns else {}
+        )
+        datasets.append(
+            {
+                "name": path.stem,
+                "file": path.name,
+                "rows": int(len(frame)),
+                "columns": list(frame.columns),
+                "label_counts": {str(key): int(value) for key, value in label_counts.items()},
+                "source": DATASET_SOURCES.get(path.stem, "本地数据集"),
+            }
+        )
+    return datasets
+
+
+def _resolve_dataset_path(name: str) -> Path:
+    """把数据集名解析成 datasets/equipment 下的 CSV 路径，拒绝越出目录的名字。"""
+    stem = str(name or "").strip()
+    if stem.lower().endswith(".csv"):
+        stem = stem[:-4]
+    path = (DATASET_DIR / f"{stem}.csv").resolve()
+    if path.parent != DATASET_DIR.resolve() or not path.is_file():
+        raise EquipmentMonitoringError(f"数据集不存在：{name}")
+    return path
+
+
+def load_dataset(name: str) -> pd.DataFrame:
+    """按名称读取真实数据集（自动忽略 .csv 后缀）。"""
+    frame = pd.read_csv(_resolve_dataset_path(name))
+    missing = [
+        column
+        for column in (*FEATURE_COLUMNS, "label")
+        if column not in frame.columns
+    ]
+    if missing:
+        raise EquipmentMonitoringError("数据集缺少字段：" + "、".join(missing))
+    return frame
+
+
+def clamp_dataset_limit(limit: object) -> int:
+    """把外部传入的样本数收进 [1, DATASET_LIMIT_MAX]；缺省或非法值用默认值。"""
+    try:
+        value = int(limit)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        value = 0
+    if value <= 0:
+        value = DATASET_LIMIT_DEFAULT
+    return min(value, DATASET_LIMIT_MAX)
+
+
+def load_dataset_records(
+    name: str, limit: object = None, seed: int = RANDOM_SEED
+) -> list[dict]:
+    """从真实数据集中抽取一段记录，可直接提交给 diagnose_equipment。
+
+    一次最多取 DATASET_LIMIT_MAX 行：真实数据集有上万行，不设上限会让接口响应、
+    数据库 JSON 字段和前端表格一起被撑爆。
+    """
+    frame = load_dataset(name)
+    size = clamp_dataset_limit(limit)
+    if size < len(frame):
+        frame = frame.sample(size, random_state=seed)
+    columns = [column for column in (*FEATURE_COLUMNS, "label") if column in frame.columns]
+    return frame[columns].to_dict(orient="records")
+
+
+@lru_cache(maxsize=4)
+def get_model_bundle(source: str = "synthetic") -> dict:
+    """训练并缓存随机森林分类器。
+
+    source="synthetic" 使用内置合成数据；其他取值读取 datasets/equipment/<source>.csv
+    作为训练数据（例如 "ai4i_equipment"）。
+    """
+    frame = generate_training_frame() if source == "synthetic" else load_dataset(source)
     features = frame[FEATURE_COLUMNS]
     target = frame["label"]
 
@@ -182,12 +282,18 @@ def get_model_bundle() -> dict:
     return {
         "model": model,
         "features": FEATURE_COLUMNS,
+        "data_source": source,
         "feature_importance": feature_importance,
         "metrics": {
             "accuracy": round(float(accuracy_score(test_target, predictions)), 4),
             "f1_macro": round(float(f1_score(test_target, predictions, average="macro")), 4),
             "training_samples": len(train_features),
             "validation_samples": len(test_features),
+            "data_source": source,
+            "dataset_rows": int(len(frame)),
+            "label_counts": {
+                str(key): int(value) for key, value in frame["label"].value_counts().items()
+            },
             "classification_report": classification_report(
                 test_target,
                 predictions,
@@ -236,13 +342,34 @@ def _rule_alerts(row: pd.Series) -> list[dict]:
     return alerts
 
 
+def _summarize_alerts(alerts: list[dict]) -> list[dict]:
+    """按告警文案去重统计。
+
+    上千行数据里同一句阈值告警会出现几十上百次（例如 AI4I 数据的电流量级使电流告警
+    几乎每行都触发），逐条返回只会刷屏，这里合并成「文案 + 出现次数」。
+    """
+    summary: dict[str, dict] = {}
+    for alert in alerts:
+        item = summary.setdefault(
+            alert["message"],
+            {"level": alert["level"], "message": alert["message"], "count": 0},
+        )
+        item["count"] += 1
+    return sorted(summary.values(), key=lambda item: (-item["count"], item["message"]))
+
+
 def diagnose_equipment(
     records: Iterable[dict],
     equipment_code: str = "CNC-01",
+    data_source: str = "synthetic",
 ) -> dict:
-    """对多变量传感器序列进行分类，并返回规则告警与可视化数据。"""
+    """对多变量传感器序列进行分类，并返回规则告警与可视化数据。
+
+    data_source 决定使用哪套训练数据：默认内置合成数据，也可传真实数据集名
+    （例如 "ai4i_equipment"，对应 datasets/equipment/ai4i_equipment.csv）。
+    """
     frame = _normalize_records(records)
-    bundle = get_model_bundle()
+    bundle = get_model_bundle(data_source)
     model = bundle["model"]
 
     feature_frame = frame[FEATURE_COLUMNS]
@@ -328,7 +455,7 @@ def diagnose_equipment(
             4,
         ),
         "state_distribution": state_distribution,
-        "rule_alerts": activated_alerts[-12:],
+        "rule_alerts": _summarize_alerts(activated_alerts),
         "feature_summary": feature_summary,
         "feature_importance": bundle["feature_importance"],
         "model_metrics": bundle["metrics"],
