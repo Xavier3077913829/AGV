@@ -10,6 +10,16 @@
 from __future__ import annotations
 
 import os
+import re
+import shutil
+import tempfile
+import uuid
+
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024          # 单张图片上限 10 MB
+ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff"}
+SAFE_TOKEN = re.compile(r"^[A-Za-z0-9_\-]{1,32}$")
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+UPLOAD_ROOT = os.path.join(PROJECT_ROOT, "datasets", "auto", "_incoming")
 
 from rest_framework import status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -26,6 +36,49 @@ from .services_algo import (
 )
 
 PARSERS = (JSONParser, MultiPartParser, FormParser)
+
+
+def _safe_category(value) -> str:
+    """类别名只允许字母数字下划线短横线，长度 ≤32。"""
+    cat = str(value or "mt_crack").strip()
+    if not SAFE_TOKEN.match(cat):
+        raise ValueError("category 只能包含字母、数字、下划线或短横线，且不超过 32 个字符")
+    return cat
+
+
+def _safe_dst_root(value) -> str | None:
+    """dst_root 必须是 datasets/auto 下的子路径，禁止绝对路径与 .. 穿越。"""
+    if value in (None, ""):
+        return None
+    base = os.path.abspath(os.path.join(PROJECT_ROOT, "datasets", "auto"))
+    candidate = os.path.abspath(os.path.join(base, str(value)))
+    if candidate != base and not candidate.startswith(base + os.sep):
+        raise ValueError("dst_root 必须位于 datasets/auto 目录之内")
+    return candidate
+
+
+def _save_upload(upload) -> str:
+    """把上传图片写进本次请求独有的临时目录，返回文件路径（调用方负责清理）。"""
+    size = getattr(upload, "size", None) or 0
+    if size > MAX_UPLOAD_BYTES:
+        raise ValueError(f"图片过大，上限 {MAX_UPLOAD_BYTES // 1024 // 1024} MB")
+    name = os.path.basename(getattr(upload, "name", "") or "upload.jpg")
+    ext = os.path.splitext(name)[1].lower() or ".jpg"
+    if ext not in ALLOWED_EXT:
+        raise ValueError("仅支持 jpg / jpeg / png / bmp / webp / tif 图片")
+    os.makedirs(UPLOAD_ROOT, exist_ok=True)
+    tmp_dir = tempfile.mkdtemp(prefix="req_", dir=UPLOAD_ROOT)
+    path = os.path.join(tmp_dir, f"upload_{uuid.uuid4().hex}{ext}")
+    with open(path, "wb") as f:
+        for chunk in upload.chunks():
+            f.write(chunk)
+    return path
+
+
+def _cleanup(path: str | None) -> None:
+    if not path:
+        return
+    shutil.rmtree(os.path.dirname(path), ignore_errors=True)
 
 
 class AlgoStatusView(APIView):
@@ -49,8 +102,8 @@ class DatasetBuildView(APIView):
     def post(self, request):
         try:
             info = build_dataset_from_project(
-                dst_root=request.data.get("dst_root") or None,
-                category=str(request.data.get("category") or "mt_crack"),
+                dst_root=_safe_dst_root(request.data.get("dst_root")),
+                category=_safe_category(request.data.get("category")),
             )
         except Exception as exc:                     # pragma: no cover
             return Response({"detail": f"{type(exc).__name__}: {exc}"},
@@ -71,19 +124,18 @@ class PatchcoreInferView(APIView):
         if upload is None:
             return Response({"detail": "请上传图片（字段名 file）"},
                             status=status.HTTP_400_BAD_REQUEST)
-        tmp_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                               "datasets", "auto", "_incoming")
-        os.makedirs(tmp_dir, exist_ok=True)
-        tmp_path = os.path.join(tmp_dir, os.path.basename(upload.name or "upload.jpg"))
-        with open(tmp_path, "wb") as f:
-            for chunk in upload.chunks():
-                f.write(chunk)
+        try:
+            tmp_path = _save_upload(upload)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         try:
             result = predict_patchcore([tmp_path],
                                        model_dir=request.data.get("model_dir") or None)
         except Exception as exc:
             return Response({"detail": f"{type(exc).__name__}: {exc}"},
                             status=status.HTTP_400_BAD_REQUEST)
+        finally:
+            _cleanup(tmp_path)
         return Response({"results": result})
 
 
@@ -97,13 +149,10 @@ class DeepCrackSegmentView(APIView):
         if upload is None:
             return Response({"detail": "请上传图片（字段名 file）"},
                             status=status.HTTP_400_BAD_REQUEST)
-        tmp_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                               "datasets", "auto", "_incoming")
-        os.makedirs(tmp_dir, exist_ok=True)
-        tmp_path = os.path.join(tmp_dir, os.path.basename(upload.name or "upload.jpg"))
-        with open(tmp_path, "wb") as f:
-            for chunk in upload.chunks():
-                f.write(chunk)
+        try:
+            tmp_path = _save_upload(upload)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         try:
             result = segment_crack(tmp_path,
                                    device=request.data.get("device") or "cpu",
@@ -115,6 +164,8 @@ class DeepCrackSegmentView(APIView):
         except Exception as exc:                    # noqa: BLE001
             return Response({"detail": f"{type(exc).__name__}: {exc}"},
                             status=status.HTTP_400_BAD_REQUEST)
+        finally:
+            _cleanup(tmp_path)
         return Response(result)
 
 

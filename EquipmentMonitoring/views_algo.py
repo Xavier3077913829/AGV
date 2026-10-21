@@ -118,7 +118,13 @@ class FeatureExtractView(APIView):
                             status=status.HTTP_503_SERVICE_UNAVAILABLE)
         try:
             frame = _frame_from_request(request)
+            if len(frame) > 20000:
+                raise EquipmentMonitoringError("样本行数过多（上限 20000 行）")
             window = int(request.data.get("window") or 64)
+            if window < 8 or window > 256:
+                raise EquipmentMonitoringError("window 必须在 8~256 之间")
+            if len(frame) < window:
+                raise EquipmentMonitoringError(f"样本行数（{len(frame)}）少于窗口长度（{window}）")
             summary = features_summary(frame, window=window)
         except EquipmentMonitoringError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)

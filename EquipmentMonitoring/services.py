@@ -384,8 +384,13 @@ def load_dataset_records(
     frame = load_dataset(name)
     if limit and 0 < limit < len(frame):
         frame = frame.sample(limit, random_state=seed)
-    columns = [column for column in (*FEATURE_COLUMNS, "label") if column in frame.columns]
-    return frame[columns].to_dict(orient="records")
+    # 送出：5 个通用传感器列（规则告警要用）+ 该数据集训练时的全部特征列 + 标签
+    feature_names = dataset_features(name, frame)
+    ordered = [c for c in FEATURE_COLUMNS if c in frame.columns]
+    ordered += [c for c in feature_names if c not in ordered]
+    if "label" in frame.columns:
+        ordered.append("label")
+    return frame[ordered].to_dict(orient="records")
 
 
 @lru_cache(maxsize=4)
@@ -459,12 +464,10 @@ def get_model_bundle(
         [
             {
                 "feature": feature,
-                "label": FEATURE_LABELS[feature],
+                "label": FEATURE_LABELS.get(feature, feature),
                 "importance": round(float(importance), 6),
             }
-            for feature, importance in zip(
-                FEATURE_COLUMNS, importances
-            )
+            for feature, importance in zip(feature_columns, importances)
         ],
         key=lambda item: item["importance"],
         reverse=True,
@@ -561,7 +564,8 @@ def get_worn_detector(source: str = "ai4i_equipment") -> dict:
         return cached
 
     frame = generate_training_frame() if source == "synthetic" else load_dataset(source)
-    features = frame[FEATURE_COLUMNS]
+    feature_names = dataset_features(source, frame)
+    features = frame[feature_names]
     target = (frame["label"] == "worn").astype(int)
 
     train_f, test_f, train_t, test_t = train_test_split(
@@ -649,7 +653,13 @@ def diagnose_equipment(
     bundle = get_model_bundle(data_source, model_type=model_type, use_smote=use_smote)
     model = bundle["model"]
 
-    feature_frame = frame[FEATURE_COLUMNS]
+    feature_names = list(bundle.get("features") or FEATURE_COLUMNS)
+    missing = [c for c in feature_names if c not in frame.columns]
+    if missing:
+        raise EquipmentMonitoringError(
+            "训练特征与输入数据不匹配，缺少：" + "、".join(missing[:5])
+        )
+    feature_frame = frame[feature_names]
     predicted = model.predict(feature_frame)
     probabilities = model.predict_proba(feature_frame)
     encoder = bundle.get("label_encoder")
@@ -756,6 +766,7 @@ def diagnose_equipment(
         "feature_summary": feature_summary,
         "feature_importance": bundle["feature_importance"],
         "model_metrics": bundle["metrics"],
+        "data_source": bundle.get("data_source") or data_source,
         "series": rows,
     }
 
@@ -779,7 +790,8 @@ def get_anomaly_detector(source: str = "synthetic") -> dict:
     from sklearn.preprocessing import StandardScaler
 
     frame = generate_training_frame() if source == "synthetic" else load_dataset(source)
-    normal = frame[frame["label"] == "normal"][FEATURE_COLUMNS].to_numpy(dtype=float)
+    feature_names = dataset_features(source, frame)
+    normal = frame[frame["label"] == "normal"][feature_names].to_numpy(dtype=float)
     if len(normal) < 50:
         raise RuntimeError(f"正常样本不足（{len(normal)} 条），无法训练异常检测器")
 
@@ -791,6 +803,7 @@ def get_anomaly_detector(source: str = "synthetic") -> dict:
         "detector": detector,
         "threshold": float(np.percentile(train_scores, 99)),
         "normal_samples": int(len(normal)),
+        "features": feature_names,
         "source": source,
     }
     _ANOMALY_CACHE[source] = bundle
@@ -800,7 +813,7 @@ def get_anomaly_detector(source: str = "synthetic") -> dict:
 def anomaly_scores(frame: pd.DataFrame, source: str = "synthetic") -> dict:
     """给一段时序打分：绝对异常分（相对同源正常分布）+ 越线统计。"""
     bundle = get_anomaly_detector(source)
-    X = bundle["scaler"].transform(frame[FEATURE_COLUMNS].to_numpy(dtype=float))
+    X = bundle["scaler"].transform(frame[bundle["features"]].to_numpy(dtype=float))
     scores = np.asarray(bundle["detector"].decision_function(X), dtype=float)
     threshold = bundle["threshold"]
     flagged = int((scores > threshold).sum())

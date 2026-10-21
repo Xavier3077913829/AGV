@@ -361,7 +361,7 @@ def forecast_demand(
     candidate_models = ALL_MODELS if model == "auto" else (model,)
     if any(name not in ALL_MODELS for name in candidate_models):
         raise DemandForecastError(
-            "model 只能是 auto、moving_average、holt_winters 或 arima。"
+            "model 只能是 auto、lightgbm、moving_average、holt_winters 或 arima。"
         )
 
     values = frame["order_count"].to_numpy(dtype=float)
@@ -369,6 +369,10 @@ def forecast_demand(
     validation_horizon = min(max(horizon, 7), max(7, len(values) // 5))
     train_values = values[:-validation_horizon]
     actual_values = values[-validation_horizon:]
+    # LightGBM 的日历特征（周几/月份/年内第几天）必须用真实日期，
+    # 否则会退化成从 2000-01-01 起的假日期，周频/月频数据全部错位。
+    all_dates = pd.DatetimeIndex(frame["date"])
+    train_dates = all_dates[:-validation_horizon]
     if len(train_values) < 20:
         raise DemandForecastError("回测训练数据不足，请增加历史数据量。")
 
@@ -376,7 +380,8 @@ def forecast_demand(
     for candidate in candidate_models:
         try:
             predicted = _fit_forecast(
-                candidate, train_values, validation_horizon, seasonal_period, ma_window
+                candidate, train_values, validation_horizon,
+                seasonal_period, ma_window, dates=train_dates,
             )
             if len(predicted) != validation_horizon or not np.all(np.isfinite(predicted)):
                 raise ValueError("forecast contains invalid values")
@@ -405,7 +410,7 @@ def forecast_demand(
         ),
     )
     future_values = _fit_forecast(
-        selected_model, values, horizon, seasonal_period, ma_window
+        selected_model, values, horizon, seasonal_period, ma_window, dates=all_dates
     )
     future_values = np.maximum(future_values, 0.0)
 

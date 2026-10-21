@@ -10,6 +10,7 @@ import numpy as np
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.test import TestCase, override_settings
+from rest_framework.test import APIClient
 
 from . import datasets
 from .models import VisionRecord
@@ -270,3 +271,20 @@ class ManagementCommandTests(TestCase):
             metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
             self.assertIn("detection", metrics)
             self.assertIn("classification", metrics)
+
+
+class AlgoInputGuardTests(TestCase):
+    def test_dataset_view_rejects_unsafe_input(self):
+        client = APIClient()
+        for payload in ({"category": "../evil"}, {"category": "a" * 40},
+                        {"dst_root": "../../etc"}):
+            resp = client.post("/api/vision/algo/dataset/", payload, format="json")
+            self.assertEqual(resp.status_code, 400, payload)
+
+    def test_patchcore_rejects_non_image_upload(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        client = APIClient()
+        upload = SimpleUploadedFile("a.txt", b"not an image", content_type="text/plain")
+        resp = client.post("/api/vision/algo/patchcore/", {"file": upload}, format="multipart")
+        self.assertIn(resp.status_code, (400, 503))
