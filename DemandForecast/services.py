@@ -15,6 +15,7 @@ MODEL_LABELS = {
     "moving_average": "移动平均",
     "holt_winters": "Holt-Winters",
     "arima": "ARIMA",
+    "lightgbm": "LightGBM（日历+滞后）",
 }
 
 ALL_MODELS = tuple(MODEL_LABELS)
@@ -55,6 +56,68 @@ SERIES_SOURCES = {
     "online_retail_daily": "UCI Online Retail 真实交易按天聚合（2010-12 ~ 2011-12，541,909 条交易）",
     "m3_new_orders": "US Census M3 制造业新订单（月度）",
 }
+
+
+
+# ---- 列名别名：兼容老师给的 date/store/item/sales 格式 ----
+_DATE_ALIASES = ("date", "日期", "dt", "day", "datetime", "time")
+_VALUE_ALIASES = (
+    "order_count", "sales", "sales_qty", "qty", "quantity", "amount",
+    "order_qty", "volume", "销量", "订单量", "销量(件)",
+)
+_GROUP_ALIASES = ("store", "item", "sku", "product", "store_id", "item_id", "门店", "商品")
+
+
+def standardize_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
+    """把任意订单 CSV 归一到 date + order_count。
+
+    支持：
+      - date, order_count                       （原格式）
+      - date, sales                             （老师给的数据）
+      - date, store, item, sales                （多序列 → 按 date 汇总求和）
+    返回 (归一化后的 frame, 说明信息)。
+    """
+    frame = frame.copy()
+    lower = {str(c).strip().lower(): c for c in frame.columns}
+
+    def pick(aliases):
+        for a in aliases:
+            if a in lower:
+                return lower[a]
+        return None
+
+    date_col = pick(_DATE_ALIASES)
+    value_col = pick(_VALUE_ALIASES)
+    if value_col is None:
+        # 退一步：任意数值列里找名字含 count/sales/qty 的
+        for c in frame.columns:
+            name = str(c).lower()
+            if any(k in name for k in ("count", "sales", "qty", "quantity", "amount")):
+                value_col = c
+                break
+    if date_col is None or value_col is None:
+        raise DemandForecastError(
+            "订单数据需要日期列与数值列：支持 date + order_count，也支持 date + sales（含 store/item 时按天汇总）。"
+        )
+
+    group_cols = [lower[a] for a in _GROUP_ALIASES if a in lower]
+    work = frame[[date_col, value_col] + group_cols].copy()
+    work = work.rename(columns={date_col: "date", value_col: "order_count"})
+    work["date"] = pd.to_datetime(work["date"], errors="coerce")
+    work["order_count"] = pd.to_numeric(work["order_count"], errors="coerce")
+    work = work.dropna(subset=["date", "order_count"])
+
+    info = {"value_column": str(value_col), "aggregated": False, "groups": 1}
+    if group_cols:
+        n_groups = int(work.groupby(group_cols).ngroups) if len(work) else 0
+        work = (
+            work.groupby("date", as_index=False)["order_count"]
+            .sum()
+            .sort_values("date")
+        )
+        info.update({"aggregated": True, "groups": n_groups,
+                     "note": f"检测到 {group_cols} → 已按日期汇总 {n_groups} 条序列"})
+    return work, info
 
 
 def available_series() -> list[dict]:
@@ -122,13 +185,14 @@ def _infer_frequency(frame: pd.DataFrame) -> tuple[str, int, int]:
     return "D", 7, 7
 
 
-def _normalize_history(history: Iterable[dict] | pd.DataFrame) -> pd.DataFrame:
+def _normalize_history(history: Iterable[dict] | pd.DataFrame, meta: dict | None = None) -> pd.DataFrame:
     frame = history.copy() if isinstance(history, pd.DataFrame) else pd.DataFrame(list(history))
     if frame.empty:
         raise DemandForecastError("历史订单数据不能为空。")
-    if "date" not in frame.columns or "order_count" not in frame.columns:
-        raise DemandForecastError("历史订单数据必须包含 date 和 order_count 字段。")
-
+    # 先做列名标准化（兼容 date/sales、store/item 多序列），再校验
+    frame, _info = standardize_frame(frame)
+    if meta is not None:
+        meta.update(_info)
     normalized = frame[["date", "order_count"]].copy()
     normalized["date"] = pd.to_datetime(normalized["date"], errors="coerce")
     normalized["order_count"] = pd.to_numeric(normalized["order_count"], errors="coerce")
@@ -185,12 +249,71 @@ def _arima_forecast(values: np.ndarray, horizon: int) -> np.ndarray:
     return np.asarray(forecast, dtype=float)
 
 
+def _lightgbm_vector(history: np.ndarray, when: pd.Timestamp) -> list[float]:
+    """单个时间点的特征向量（训练与推理共用，保证口径一致）。
+
+    特征：星期/月份/年内第几天/是否周末 + 周与年周期的正弦余弦（不含线性趋势，
+    避免树模型把“序号”当趋势外推）+ 多阶滞后 + 排除当天的滚动统计。
+    """
+    hist = np.asarray(history, dtype=float)
+    n = len(hist)
+    dow = int(when.dayofweek)
+    doy = int(when.dayofyear)
+    feats = [dow, int(when.month), doy, int(dow >= 5)]
+    for k in (1, 2, 3):
+        feats += [float(np.sin(2 * np.pi * k * dow / 7)), float(np.cos(2 * np.pi * k * dow / 7))]
+    for k in (1, 2, 3, 4, 5, 6):
+        feats += [float(np.sin(2 * np.pi * k * doy / 365.25)),
+                  float(np.cos(2 * np.pi * k * doy / 365.25))]
+    for lag in (1, 2, 3, 7, 14, 21, 28, 364):
+        feats.append(float(hist[n - lag]) if n >= lag else float(np.mean(hist)))
+    for w in (7, 28):
+        seg = hist[max(0, n - w):n]
+        feats += [float(seg.mean()), float(seg.std()), float(seg.min()), float(seg.max())]
+    return feats
+
+
+def _lightgbm_forecast(values: np.ndarray, horizon: int, dates=None) -> np.ndarray:
+    """LightGBM 递推多步预测（每预测一天把预测值并入历史）。"""
+    import lightgbm as lgb
+
+    values = np.asarray(values, dtype=float)
+    if dates is None:
+        dates = pd.date_range("2000-01-01", periods=len(values), freq="D")
+    dates = pd.DatetimeIndex(dates)
+    start = min(365, max(0, len(values) // 3))
+    if len(values) - start < 60:
+        raise ValueError("LightGBM 需要至少约 400 天历史数据")
+
+    X = np.asarray([_lightgbm_vector(values[:i], dates[i]) for i in range(start, len(values))], float)
+    y = values[start:]
+    model = lgb.LGBMRegressor(
+        n_estimators=700, learning_rate=0.04, num_leaves=31, min_child_samples=20,
+        subsample=0.9, colsample_bytree=0.9, random_state=RANDOM_SEED, verbose=-1, n_jobs=4,
+    )
+    model.fit(X, y)
+
+    step_days = float(pd.Series(dates).diff().dt.days.dropna().median() or 1)
+    freq = "MS" if step_days >= 25 else ("W" if step_days >= 6 else "D")
+    future_dates = pd.date_range(dates[-1], periods=horizon + 1, freq=freq)[1:]
+
+    history = list(values)
+    preds = []
+    for fd in future_dates:
+        feat = np.asarray([_lightgbm_vector(np.asarray(history, float), fd)], float)
+        v = max(float(model.predict(feat)[0]), 0.0)
+        preds.append(v)
+        history.append(v)
+    return np.asarray(preds, dtype=float)
+
+
 def _fit_forecast(
     model_name: str,
     values: np.ndarray,
     horizon: int,
     seasonal_period: int = 7,
     ma_window: int | None = None,
+    dates=None,
 ) -> np.ndarray:
     if model_name == "moving_average":
         return _moving_average_forecast(values, horizon, ma_window)
@@ -198,6 +321,8 @@ def _fit_forecast(
         return _holt_winters_forecast(values, horizon, seasonal_period)
     if model_name == "arima":
         return _arima_forecast(values, horizon)
+    if model_name == "lightgbm":
+        return _lightgbm_forecast(values, horizon, dates)
     raise DemandForecastError(f"未知预测模型：{model_name}")
 
 
@@ -224,7 +349,8 @@ def forecast_demand(
     model: str = "auto",
 ) -> dict:
     """回测候选模型，选择误差最小者并预测未来订单。"""
-    frame = _normalize_history(history)
+    _meta: dict = {}
+    frame = _normalize_history(history, meta=_meta)
     horizon = int(horizon)
     if horizon < 1 or horizon > 120:
         raise DemandForecastError("预测期数必须在 1 到 120 之间。")
@@ -320,4 +446,5 @@ def forecast_demand(
         "candidate_metrics": candidates,
         "history": history_payload,
         "forecast": forecast_payload,
+        "aggregation": dict(_meta),
     }

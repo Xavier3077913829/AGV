@@ -1,0 +1,10 @@
+# AGV 项目 —— 算法增强依赖（2026-10 新增）
+# 原有依赖见 requirements.txt；本文件是新增的算法层依赖
+# 安装（推荐从 vendor 目录本地安装，离线可用）：
+#   pip install -r requirements-algo.txt
+# 或者分别安装源码目录：
+#   pip install ./vendor/pyod ./vendor/tsfresh ./vendor/anomalib
+
+tsfresh>=0.20
+pyod>=2.0
+anomalib>=1.0

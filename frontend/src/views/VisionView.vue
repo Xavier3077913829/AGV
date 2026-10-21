@@ -6,6 +6,7 @@ const emit = defineEmits(['notify'])
 
 const MODES = [
   { key: 'crack', label: '表面裂纹检测', groups: ['crack', 'free'] },
+  { key: 'defect', label: '缺陷类型识别（NEU 6类）', groups: ['crack'] },
   { key: 'workpiece', label: '工件识别', groups: ['workpiece'] },
 ]
 const SHAPE_LABELS = {
@@ -32,13 +33,21 @@ const loadingRecords = ref(false)
 const error = ref('')
 const result = ref(null)
 
-const crackParams = ref({ score_threshold: 0.54, vessel_threshold: 0.55, min_aspect: 2.5, mask_dilation: 2 })
+const crackAlgorithm = ref('deepcrack')
+const deepcrackParams = ref({ algorithm: 'deepcrack', threshold: 0.5, min_area: 8, min_coverage: 0.0002, max_side: 512 })
+const frangiParams = ref({ algorithm: 'frangi', score_threshold: 0.54, vessel_threshold: 0.55, min_aspect: 2.5, mask_dilation: 2 })
 const workpieceParams = ref({ min_area: 300, approx_epsilon: 0.02, morph_kernel: 5 })
 
 const currentMode = computed(() => MODES.find((item) => item.key === mode.value) || MODES[0])
 const groups = computed(() => currentMode.value.groups)
 const activeSamples = computed(() => samples.value[sampleGroup.value] || [])
-const activeParams = computed(() => (mode.value === 'crack' ? crackParams.value : workpieceParams.value))
+const activeParams = computed(() => {
+  if (mode.value === 'defect') return {}
+  if (mode.value === 'crack') {
+    return crackAlgorithm.value === 'deepcrack' ? deepcrackParams.value : frangiParams.value
+  }
+  return workpieceParams.value
+})
 const canRun = computed(() => (sourceKind.value === 'upload' ? !!file.value : !!sampleName.value))
 const datasetCounts = computed(() => {
   const summary = datasetSummary.value || {}
@@ -139,9 +148,13 @@ async function runDetect() {
     } else {
       payload = { sample: `${sampleGroup.value}/${sampleName.value}`, params }
     }
-    result.value = mode.value === 'crack'
-      ? await api.visionCrack(payload)
-      : await api.visionDetect(payload)
+    if (mode.value === 'defect') {
+      result.value = await api.visionDefect(payload)
+    } else {
+      result.value = mode.value === 'crack'
+        ? await api.visionCrack(payload)
+        : await api.visionDetect(payload)
+    }
     notify(`检测完成，用时 ${result.value.elapsed_ms} ms`)
     await loadOverview()
     if (records.value.length) await loadRecords()
@@ -185,7 +198,7 @@ onUnmounted(() => {
     <div class="panel-head">
       <div>
         <div class="panel-title">视觉检测</div>
-        <div class="panel-desc">OpenCV 传统算法：任务 4 表面裂纹检测（MT 数据集）与任务 5 几何工件识别（合成数据集）</div>
+        <div class="panel-desc">DeepCrack 监督分割（默认）+ Frangi 传统方法回退：任务 4 表面裂纹检测（MT 数据集）与任务 5 几何工件识别（合成数据集）</div>
       </div>
       <div class="toolbar-right">
         <button class="btn btn-sm" :class="{ 'btn-primary': subTab === 'detect' }" @click="subTab = 'detect'">在线检测</button>
@@ -243,23 +256,58 @@ onUnmounted(() => {
 
               <template v-if="mode === 'crack'">
                 <div class="field">
+                  <label>裂纹算法</label>
+                  <select v-model="crackAlgorithm" class="select">
+                    <option value="deepcrack">DeepCrack 监督分割（推荐）</option>
+                    <option value="frangi">Frangi 传统方法</option>
+                  </select>
+                </div>
+              </template>
+              <template v-if="mode === 'crack' && crackAlgorithm === 'deepcrack'">
+                <div class="field">
+                  <label>分割阈值 threshold</label>
+                  <input v-model.number="deepcrackParams.threshold" class="input" type="number" step="0.05" min="0.05" max="0.95" />
+                </div>
+                <div class="field">
+                  <label>最小裂纹面积 min_area</label>
+                  <input v-model.number="deepcrackParams.min_area" class="input" type="number" step="1" min="0" max="200" />
+                </div>
+                <div class="field">
+                  <label>判定覆盖率 min_coverage</label>
+                  <input v-model.number="deepcrackParams.min_coverage" class="input" type="number" step="0.0002" min="0" max="0.01" />
+                </div>
+                <div class="field">
+                  <label>推理长边上限 max_side</label>
+                  <input v-model.number="deepcrackParams.max_side" class="input" type="number" step="64" min="128" max="2048" />
+                </div>
+              </template>
+              <template v-if="mode === 'crack' && crackAlgorithm === 'frangi'">
+                <div class="field">
                   <label>判定阈值 score_threshold</label>
-                  <input v-model.number="crackParams.score_threshold" class="input" type="number" step="0.02" min="0.05" max="1.5" />
+                  <input v-model.number="frangiParams.score_threshold" class="input" type="number" step="0.02" min="0.05" max="1.5" />
                 </div>
                 <div class="field">
                   <label>黑脊响应阈值 vessel_threshold</label>
-                  <input v-model.number="crackParams.vessel_threshold" class="input" type="number" step="0.05" min="0.05" max="0.95" />
+                  <input v-model.number="frangiParams.vessel_threshold" class="input" type="number" step="0.05" min="0.05" max="0.95" />
                 </div>
                 <div class="field">
                   <label>细长比下限 min_aspect</label>
-                  <input v-model.number="crackParams.min_aspect" class="input" type="number" step="0.1" min="1.2" max="8" />
+                  <input v-model.number="frangiParams.min_aspect" class="input" type="number" step="0.1" min="1.2" max="8" />
                 </div>
                 <div class="field">
                   <label>掩码膨胀像素 mask_dilation</label>
-                  <input v-model.number="crackParams.mask_dilation" class="input" type="number" step="1" min="0" max="5" />
+                  <input v-model.number="frangiParams.mask_dilation" class="input" type="number" step="1" min="0" max="5" />
                 </div>
               </template>
-              <template v-else>
+              <template v-if="mode === 'defect'">
+                <div class="field full">
+                  <div class="notice">
+                    使用 NEU 热轧带钢 <b>6 类缺陷</b> CNN（crazing / inclusion / patches / pitted / rolled-in / scratches），
+                    测试准确率 <b>98.9%</b>；该任务<b>无需调参</b>，直接点「开始检测」。
+                  </div>
+                </div>
+              </template>
+              <template v-if="mode === 'workpiece'">
                 <div class="field">
                   <label>最小面积 min_area</label>
                   <input v-model.number="workpieceParams.min_area" class="input" type="number" step="50" min="20" max="5000" />
@@ -291,7 +339,7 @@ onUnmounted(() => {
         <section class="panel">
           <div class="panel-head">
             <div><div class="panel-title">检测结果</div><div class="panel-desc">左侧原图，右侧为算法标注后的结果图</div></div>
-            <span v-if="result" class="tag">{{ result.task_type === 'crack' ? '裂纹检测' : '工件识别' }}</span>
+            <span v-if="result" class="tag">{{ result.task_type === 'crack' ? '裂纹检测' : result.task_type === 'defect' ? '缺陷识别' : '工件识别' }}</span>
           </div>
           <div class="panel-body">
             <div class="vision-compare">
@@ -302,7 +350,8 @@ onUnmounted(() => {
               </figure>
               <figure class="vision-figure">
                 <figcaption class="cell-sub">结果图像</figcaption>
-                <img v-if="result" class="vision-preview" :src="result.image_url" alt="检测结果" />
+                <img v-if="result && result.image_url" class="vision-preview" :src="result.image_url" alt="检测结果" />
+                <div v-else-if="result" class="vision-placeholder">该任务无标注结果图</div>
                 <div v-else class="vision-placeholder">尚未检测</div>
               </figure>
             </div>
@@ -310,16 +359,45 @@ onUnmounted(() => {
             <template v-if="result && result.task_type === 'crack'">
               <div class="notice mt-16" :class="result.result === 'crack' ? 'warning' : 'success'">
                 <strong>{{ result.result === 'crack' ? '判定：检出裂纹' : '判定：未见裂纹' }}</strong>
-                <span v-if="result.result === 'crack' && !result.localized">（置信分超过阈值但未定位到细长连通域，建议人工复核）</span>
+                <span v-if="result.fallback">（DeepCrack 不可用，已回退到 Frangi 传统方法）</span>
+                <span v-else-if="result.result === 'crack' && !result.localized">（置信分超过阈值但未定位到裂纹区域，建议人工复核）</span>
               </div>
               <div class="grid metric-grid mt-16">
                 <div class="optimization-metric"><span>判定结果</span><strong>{{ result.result === 'crack' ? 'crack' : 'normal' }}</strong></div>
+                <div class="optimization-metric"><span>算法</span><strong>{{ result.algorithm === 'deepcrack' ? 'DeepCrack' : 'Frangi' }}</strong></div>
                 <div class="optimization-metric"><span>裂纹区域数</span><strong>{{ result.count }}</strong></div>
                 <div class="optimization-metric"><span>置信分</span><strong>{{ result.score }}</strong></div>
-                <div class="optimization-metric"><span>最大脊响应</span><strong>{{ result.max_response ?? '--' }}</strong></div>
+                <div v-if="result.algorithm === 'deepcrack'" class="optimization-metric"><span>裂纹覆盖率</span><strong>{{ result.coverage ?? '--' }}</strong></div>
+                <div v-if="result.algorithm === 'deepcrack'" class="optimization-metric"><span>最大概率</span><strong>{{ result.max_prob ?? '--' }}</strong></div>
+                <div v-if="result.algorithm !== 'deepcrack'" class="optimization-metric"><span>最大脊响应</span><strong>{{ result.max_response ?? '--' }}</strong></div>
                 <div class="optimization-metric"><span>原图尺寸</span><strong>{{ result.width }}×{{ result.height }}</strong></div>
                 <div class="optimization-metric"><span>耗时</span><strong>{{ result.elapsed_ms }} ms</strong></div>
               </div>
+            </template>
+
+            <template v-else-if="result && result.task_type === 'defect'">
+              <div class="notice mt-16" :class="result.is_line_like ? 'warning' : 'success'">
+                <strong>判定：{{ result.predicted_label }}</strong>
+                <span>（置信度 {{ (result.confidence * 100).toFixed(1) }}%）</span>
+                <span v-if="result.is_line_like"> · 线状缺陷，建议再做裂纹分割定位</span>
+              </div>
+              <div class="grid metric-grid mt-16">
+                <div class="optimization-metric"><span>缺陷类型</span><strong>{{ result.predicted_class }}</strong></div>
+                <div class="optimization-metric"><span>中文</span><strong>{{ result.predicted_label }}</strong></div>
+                <div class="optimization-metric"><span>置信度</span><strong>{{ (result.confidence * 100).toFixed(1) }}%</strong></div>
+                <div class="optimization-metric"><span>线状缺陷</span><strong>{{ result.is_line_like ? '是' : '否' }}</strong></div>
+                <div class="optimization-metric"><span>原图尺寸</span><strong>{{ result.width }}×{{ result.height }}</strong></div>
+                <div class="optimization-metric"><span>耗时</span><strong>{{ result.elapsed_ms }} ms</strong></div>
+              </div>
+              <div class="mt-16">
+                <div class="cell-sub mb-8">Top-3 概率</div>
+                <div v-for="item in result.top3 || []" :key="item.class" class="defect-bar-row">
+                  <span class="defect-bar-label">{{ item.label }}</span>
+                  <div class="progress-track"><div class="progress-bar" :style="{ width: `${item.probability * 100}%` }"></div></div>
+                  <strong>{{ (item.probability * 100).toFixed(1) }}%</strong>
+                </div>
+              </div>
+              <div class="notice mt-16">{{ result.note }}</div>
             </template>
 
             <template v-else-if="result">
@@ -419,4 +497,8 @@ onUnmounted(() => {
 .mini-stat span { white-space: nowrap; }
 .vision-mini-value { font-size: 19px; white-space: nowrap; }
 .btn { white-space: nowrap; }
+
+/* ---- 缺陷识别 top-3 概率条 ---- */
+.defect-bar-row { display: grid; grid-template-columns: 96px minmax(0, 1fr) 56px; gap: 10px; align-items: center; font-size: 12px; margin-bottom: 7px; }
+.defect-bar-label { color: #5f7179; }
 </style>

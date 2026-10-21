@@ -11,6 +11,21 @@ class EquipmentServiceTests(TestCase):
         self.assertGreaterEqual(metrics["accuracy"], 0.9)
         self.assertGreaterEqual(metrics["f1_macro"], 0.9)
 
+    def test_model_bundle_reports_algorithm_and_per_class_metrics(self):
+        bundle = get_model_bundle(model_type="random_forest", use_smote=False)
+        self.assertEqual(bundle["model_type"], "random_forest")
+        self.assertIn("f1_per_class", bundle["metrics"])
+        self.assertIn("algorithm", bundle["metrics"])
+
+    def test_diagnose_accepts_model_type(self):
+        result = diagnose_equipment(
+            generate_demo_series("worn", points=50),
+            model_type="random_forest",
+            use_smote=False,
+        )
+        self.assertEqual(result["model_type"], "random_forest")
+        self.assertIn(result["predicted_state"], {"worn", "fault"})
+
     def test_worn_sample_is_detected(self):
         result = diagnose_equipment(generate_demo_series("worn", points=50))
         self.assertEqual(result["sample_count"], 50)

@@ -9,6 +9,7 @@ const MODEL_LABELS = {
   moving_average: '移动平均',
   holt_winters: 'Holt-Winters',
   arima: 'ARIMA',
+  lightgbm: 'LightGBM（日历+滞后）',
 }
 
 const subTab = ref('predict')
@@ -181,7 +182,7 @@ onUnmounted(() => {
 
       <div v-if="subTab === 'predict'" class="grid forecast-grid mt-16">
         <section class="panel">
-          <div class="panel-head"><div><div class="panel-title">预测配置</div><div class="panel-desc">使用内置订单序列或上传 date/order_count CSV</div></div></div>
+          <div class="panel-head"><div><div class="panel-title">预测配置</div><div class="panel-desc">使用内置订单序列，或上传 date/order_count（也支持 date/sales 多序列自动汇总）</div></div></div>
           <div class="panel-body">
             <div class="form-grid">
               <div class="field">
@@ -195,9 +196,8 @@ onUnmounted(() => {
                 <label>预测算法</label>
                 <select v-model="model" class="select">
                   <option value="auto">自动选择最优模型</option>
-                  <option value="moving_average">移动平均</option>
-                  <option value="holt_winters">Holt-Winters</option>
-                  <option value="arima">ARIMA</option>
+                  <option value="lightgbm">LightGBM（日历+滞后，综合最优）</option>
+                  <option value="holt_winters">Holt-Winters（对照/季节外推）</option>
                 </select>
               </div>
               <div class="field">
@@ -211,13 +211,13 @@ onUnmounted(() => {
             </div>
 
             <div class="notice mt-12">
-              必需列：<span class="mono">date, order_count</span>
+              必需列：<span class="mono">date + order_count</span>（或 date + sales，多序列自动汇总）
             </div>
             <div class="toolbar-row mt-16">
               <button class="btn btn-primary" :disabled="running" @click="runForecast">
                 {{ running ? '正在预测...' : '开始预测' }}
               </button>
-              <span class="muted small">自动模式会按回测 RMSE 选择最佳模型</span>
+              <span class="muted small">自动模式会在 4 个候选模型（含移动平均 / ARIMA 对照）中按回测 RMSE 选最优</span>
             </div>
             <div v-if="error" class="notice warning mt-12">{{ error }}</div>
           </div>
@@ -229,6 +229,9 @@ onUnmounted(() => {
             <span v-if="result" class="tag">{{ result.selected_model_label }}</span>
           </div>
           <div class="panel-body">
+            <div v-if="result && result.aggregation && result.aggregation.aggregated" class="notice mt-12">
+              数据来源：{{ result.aggregation.note }}（数值列：{{ result.aggregation.value_column }}），共 {{ result.history_count }} 天历史数据
+            </div>
             <div v-if="result" class="grid metric-grid">
               <div class="optimization-metric"><span>预测模型</span><strong>{{ result.selected_model_label }}</strong></div>
               <div class="optimization-metric"><span>预测总量</span><strong>{{ Math.round(result.predicted_total) }}</strong></div>

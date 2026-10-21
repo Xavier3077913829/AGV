@@ -1,8 +1,10 @@
 # ManufacturingVision — 制造视觉检测模块（课程任务 4 / 5）
 
-本应用负责课程选题 A 中的**任务 4 表面裂纹检测**与**任务 5 工件识别**，全部采用
-OpenCV 传统图像处理方法（不含深度学习），并通过 Django REST Framework 接入
-`AGV` 项目，前端在 Vue3 界面中提供「视觉检测」菜单。
+本应用负责课程选题 A 中的**任务 4 表面裂纹检测**与**任务 5 工件识别**，通过
+Django REST Framework 接入 `AGV` 项目，前端在 Vue3 界面中提供「视觉检测」菜单。
+任务 4 默认使用 **DeepCrack 监督式裂纹分割**（PyTorch），在缺少 PyTorch 或权重时
+自动回退到 OpenCV 传统方法（多尺度 Frangi 黑脊 + 连通域筛选）；任务 5 沿用 OpenCV
+几何工件识别。
 
 ## 1. 目录结构
 
@@ -38,7 +40,7 @@ ManufacturingVision/
 
 ## 3. 算法说明
 
-### 3.1 任务 4 裂纹检测（`services.analyze_crack`）
+### 3.1 任务 4 裂纹检测（`services.analyze_crack`，回退方案）
 
 真实磁瓦图像中同时存在宽而亮的加工弧纹、工件边缘阴影和纵向纹理沟槽，早期的
 “黑帽 + Otsu + 轮廓筛选”方案会把大量纹理判成裂纹（实测准确率仅 0.363）。最终
@@ -65,6 +67,23 @@ ManufacturingVision/
    hexagon`，无法判定归 `unknown`；
 6. 置信分为几何规则与 `cv2.matchShapes` 相似度的启发式组合（**不是校准概率**）。
 
+### 3.3 任务 4 裂纹检测（DeepCrack 监督分割，默认）
+
+默认路径调用 `services_supervised.analyze_crack_supervised`，内部流程：
+
+1. 懒加载 `deepcrack_model.CrackSegmenter`（权重查找顺序见
+   `services_supervised.WEIGHT_CANDIDATES`）；
+2. BGR → RGB，并把长边缩放到 `max_side`（默认 512）以内，降低 CPU 推理耗时；
+3. 网络输出融合分支的裂纹概率图，按 `threshold` 二值化；
+4. 连通域分析生成 `boxes`，并按 `min_area` 过滤离散噪点；
+5. 当 `coverage ≥ min_coverage` 且存在连通域时判定为 `crack`；
+6. 结果掩膜缩放回原图尺寸，接口同时返回 `coverage / max_prob / mean_prob` 与
+   `algorithm` 字段。
+
+若 PyTorch 未安装或找不到权重，接口抛出 `RuntimeError`，视图层捕获后自动回退到
+3.1 的 Frangi 方案，并在响应中标记 `fallback=true`。前端「视觉检测」页提供算法
+下拉框，可显式选择 `DeepCrack` 或 `Frangi`。
+
 ## 4. 接口契约
 
 前缀 `/api/vision/`，鉴权沿用项目现状（`AllowAny`），错误统一为 `400 {"detail": "..."}`
@@ -89,8 +108,10 @@ ManufacturingVision/
 
 ```json
 {
-  "success": true, "task_type": "crack", "result": "crack", "count": 1,
+  "success": true, "task_type": "crack", "algorithm": "deepcrack", "fallback": false,
+  "result": "crack", "count": 1,
   "localized": true, "score": 0.71, "max_response": 0.83,
+  "coverage": 0.0021, "max_prob": 0.98, "mean_prob": 0.14,
   "boxes": [[42, 51, 118, 9]], "image_url": "/media/vision/results/20261003/xxx_result.jpg",
   "input_image_url": "/media/vision/inputs/20261003/xxx_input.jpg",
   "record_id": 12, "elapsed_ms": 18.4, "width": 219, "height": 264, "params": { }
@@ -133,6 +154,17 @@ ManufacturingVision/
 
 参数集中在 `services.VISION_DEFAULTS`，请求中的 `params` 只接受已知键并做范围校验，
 非法值会被忽略或截断（见 `tests.CrackAlgorithmTests.test_params_override_is_sanitized`）。
+
+DeepCrack 参数集中在 `services_supervised.DEEPCRACK_DEFAULTS`：
+
+| 参数 | 默认值 | 说明 |
+| --- | --- | --- |
+| `algorithm` | `deepcrack` | 裂纹算法选择：`deepcrack` / `frangi` |
+| `threshold` | 0.5 | 概率图二值化阈值 |
+| `min_area` | 8 | 连通域最小面积（像素） |
+| `min_coverage` | 0.0002 | 判定为裂纹的最小前景覆盖率 |
+| `max_side` | 512 | 推理前长边缩放上限 |
+| `device` | `cpu` | PyTorch 推理设备 |
 
 ## 6. 运行与评估
 
@@ -207,7 +239,7 @@ ManufacturingVision/
 
 * `frontend/src/views/VisionView.vue`：新增「视觉检测」页面，含在线检测与检测记录
   两个子页；支持内置样例/本地上传、参数调整、原图与结果图对比、工件明细表、
-  记录筛选与删除。
+  记录筛选与删除；裂纹任务提供 DeepCrack / Frangi 算法切换，并按算法展示对应指标。
 * `frontend/src/api.js`：`request` 在 `body` 为 `FormData` 时不再强制 JSON
   `Content-Type`；新增 `visionCrack / visionDetect / visionSamples / visionRecords /
   deleteVisionRecord / visionOverview / visionSampleImageUrl`。

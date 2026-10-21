@@ -68,6 +68,7 @@ class EquipmentOverviewView(APIView):
     def get(self, request):
         total = EquipmentDiagnosisRecord.objects.count()
         source = str(request.query_params.get("data_source") or "synthetic")
+        model_type = str(request.query_params.get("model_type") or "auto")
         state_counts = {
             item["predicted_state"]: item["count"]
             for item in EquipmentDiagnosisRecord.objects.values("predicted_state").annotate(
@@ -82,7 +83,7 @@ class EquipmentOverviewView(APIView):
                 "total": total,
                 "state_counts": state_counts,
                 "average_confidence": round(average_confidence, 4),
-                "model_metrics": get_model_bundle(source)["metrics"],
+                "model_metrics": get_model_bundle(source, model_type=model_type)["metrics"],
                 "available_datasets": available_datasets(),
                 "recent_records": EquipmentDiagnosisRecordSerializer(
                     EquipmentDiagnosisRecord.objects.all()[:8],
@@ -145,13 +146,16 @@ class EquipmentSampleView(APIView):
 class EquipmentModelView(APIView):
     def get(self, request):
         source = str(request.query_params.get("data_source") or "synthetic")
+        model_type = str(request.query_params.get("model_type") or "auto")
+        use_smote = str(request.query_params.get("use_smote") or "0") not in {"0", "false", "no"}
         try:
-            bundle = get_model_bundle(source)
+            bundle = get_model_bundle(source, model_type=model_type, use_smote=use_smote)
         except EquipmentMonitoringError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(
             {
-                "algorithm": "StandardScaler + RandomForestClassifier",
+                "algorithm": bundle["algorithm"],
+                "model_type": bundle["model_type"],
                 "data_source": source,
                 "features": bundle["features"],
                 "feature_importance": bundle["feature_importance"],
@@ -169,8 +173,19 @@ class EquipmentDiagnoseView(APIView):
             records, source = _records_from_request(request)
             equipment_code = str(request.data.get("equipment_code") or "CNC-01")
             data_source = str(request.data.get("data_source") or "synthetic")
+            model_type = str(request.data.get("model_type") or "auto")
+            use_smote = str(request.data.get("use_smote") or "0") not in {"0", "false", "no"}
+            try:
+                worn_threshold = float(request.data.get("worn_threshold") or 0.6)
+            except (TypeError, ValueError):
+                worn_threshold = 0.6
             result = diagnose_equipment(
-                records, equipment_code=equipment_code, data_source=data_source
+                records,
+                equipment_code=equipment_code,
+                data_source=data_source,
+                model_type=model_type,
+                use_smote=use_smote,
+                worn_threshold=worn_threshold,
             )
         except EquipmentMonitoringError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
