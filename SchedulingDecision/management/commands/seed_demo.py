@@ -1,5 +1,5 @@
 from django.contrib.auth import get_user_model
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from SchedulingDecision.models import (
@@ -47,15 +47,95 @@ STATIONS = {
     "HOME3": {"name": "停车区 3", "node_type": "parking", "x": 11, "y": 0},
 }
 
+TASK_TEMPLATES = [
+    ("S2", "S6", "电子元件箱", 35, 3),
+    ("S3", "S8", "汽车零部件", 70, 4),
+    ("S10", "S1", "成品包装箱", 45, 2),
+    ("S4", "S7", "原料托盘", 95, 3),
+    ("S5", "S9", "质检样品", 18, 1),
+    ("S9", "S1", "装配工装", 60, 2),
+    ("S6", "S2", "周转空箱", 12, 1),
+    ("S8", "S3", "成品组件", 82, 4),
+    ("S1", "S10", "紧急线束", 55, 4),
+    ("S7", "S4", "补料托盘", 40, 2),
+    ("S9", "S5", "检测工装", 22, 3),
+    ("S1", "S9", "包装材料", 64, 2),
+    ("S10", "S6", "电机组件", 88, 3),
+    ("S2", "S8", "传感器盒", 28, 2),
+    ("S3", "S1", "精密齿轮", 48, 4),
+    ("S5", "S7", "工装夹具", 33, 1),
+    ("S4", "S9", "钢板样件", 105, 3),
+    ("S8", "S10", "成品机箱", 75, 2),
+    ("S6", "S1", "回收托盘", 20, 1),
+    ("S7", "S3", "装配零件", 52, 4),
+]
+
+
+def build_task_specs(count):
+    """按固定模板生成可重复的演示任务。"""
+    specs = []
+    for index in range(count):
+        pickup, dropoff, cargo, weight, priority = TASK_TEMPLATES[
+            index % len(TASK_TEMPLATES)
+        ]
+        specs.append(
+            (f"TASK-DEMO-{index + 1:03d}", pickup, dropoff, cargo, weight, priority)
+        )
+    return specs
+
+
+def upsert_demo_tasks(task_specs, station_node):
+    """写入演示任务，并清除上一轮调度结果。"""
+    for task_no, pickup, dropoff, cargo, weight, priority in task_specs:
+        TransportTask.objects.update_or_create(
+            task_no=task_no,
+            defaults={
+                "pickup_node": station_node(pickup),
+                "dropoff_node": station_node(dropoff),
+                "cargo_name": cargo,
+                "cargo_weight": weight,
+                "priority": priority,
+                "status": TransportTask.Status.PENDING,
+                "assigned_agv": None,
+                "schedule_run": None,
+                "sequence_number": 0,
+                "planned_wait_seconds": 0,
+                "optimization_details": {},
+                "route": {},
+                "total_distance": 0,
+                "estimated_duration": 0,
+                "scheduled_start": None,
+                "scheduled_end": None,
+                "started_at": None,
+                "completed_at": None,
+                "notes": "",
+            },
+        )
+
 
 class Command(BaseCommand):
     help = "初始化 AGV 调度演示数据（障碍地图、AGV、任务和管理员）"
 
     def add_arguments(self, parser):
         parser.add_argument("--reset", action="store_true", help="清空业务数据后重新初始化")
+        parser.add_argument(
+            "--reset-tasks",
+            action="store_true",
+            help="仅清空调度任务、调度记录和优化记录，保留地图与 AGV 基础数据",
+        )
+        parser.add_argument(
+            "--task-count",
+            type=int,
+            default=6,
+            help="生成的待调度演示任务数量（默认 6）",
+        )
 
     @transaction.atomic
     def handle(self, *args, **options):
+        task_count = options["task_count"]
+        if task_count < 1:
+            raise CommandError("--task-count 必须大于 0。")
+
         if options["reset"]:
             DispatchRecord.objects.all().delete()
             TransportTask.objects.all().delete()
@@ -64,6 +144,34 @@ class Command(BaseCommand):
             MapEdge.objects.all().delete()
             MapObstacle.objects.all().delete()
             MapNode.objects.all().delete()
+        elif options["reset_tasks"]:
+            DispatchRecord.objects.all().delete()
+            TransportTask.objects.all().delete()
+            ScheduleRun.objects.all().delete()
+            AGV.objects.update(status=AGV.Status.IDLE)
+
+            required_codes = {
+                code for template in TASK_TEMPLATES for code in template[:2]
+            }
+            station_nodes = {
+                node.code: node
+                for node in MapNode.objects.filter(code__in=required_codes)
+            }
+            missing_codes = sorted(required_codes - station_nodes.keys())
+            if missing_codes:
+                raise CommandError(
+                    "缺少调度基础数据，请先执行 seed_demo --reset："
+                    + ", ".join(missing_codes)
+                )
+
+            task_specs = build_task_specs(task_count)
+            upsert_demo_tasks(task_specs, station_nodes.__getitem__)
+            self.stdout.write(self.style.SUCCESS(
+                f"调度任务已重建：待调度任务 "
+                f"{TransportTask.objects.filter(status='pending').count()} 个；"
+                "地图与 AGV 位置、电量保持不变，AGV 状态已重置为空闲。"
+            ))
+            return
 
         blocked = set()
         for _code, _name, x, y, width, height in OBSTACLES:
@@ -152,39 +260,8 @@ class Command(BaseCommand):
                 },
             )
 
-        task_specs = [
-            ("TASK-DEMO-001", "S2", "S6", "电子元件箱", 35, 3),
-            ("TASK-DEMO-002", "S3", "S8", "汽车零部件", 70, 4),
-            ("TASK-DEMO-003", "S10", "S1", "成品包装箱", 45, 2),
-            ("TASK-DEMO-004", "S4", "S7", "原料托盘", 95, 3),
-            ("TASK-DEMO-005", "S5", "S9", "质检样品", 18, 1),
-            ("TASK-DEMO-006", "S9", "S1", "装配工装", 60, 2),
-        ]
-        for task_no, pickup, dropoff, cargo, weight, priority in task_specs:
-            TransportTask.objects.update_or_create(
-                task_no=task_no,
-                defaults={
-                    "pickup_node": station_node(pickup),
-                    "dropoff_node": station_node(dropoff),
-                    "cargo_name": cargo,
-                    "cargo_weight": weight,
-                    "priority": priority,
-                    "status": TransportTask.Status.PENDING,
-                    "assigned_agv": None,
-                    "schedule_run": None,
-                    "sequence_number": 0,
-                    "planned_wait_seconds": 0,
-                    "optimization_details": {},
-                    "route": {},
-                    "total_distance": 0,
-                    "estimated_duration": 0,
-                    "scheduled_start": None,
-                    "scheduled_end": None,
-                    "started_at": None,
-                    "completed_at": None,
-                    "notes": "",
-                },
-            )
+        task_specs = build_task_specs(task_count)
+        upsert_demo_tasks(task_specs, station_node)
 
         User = get_user_model()
         if not User.objects.filter(username="admin").exists():
@@ -197,4 +274,5 @@ class Command(BaseCommand):
             f"演示数据初始化完成：节点 {MapNode.objects.count()}，道路 {MapEdge.objects.count()}，"
             f"障碍 {MapObstacle.objects.count()}，AGV {AGV.objects.count()}，"
             f"待调度任务 {TransportTask.objects.filter(status='pending').count()}"
+            f"（本次生成 {len(task_specs)}）"
         ))

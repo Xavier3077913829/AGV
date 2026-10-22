@@ -26,3 +26,19 @@ class EquipmentDiagnosisRecordSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = fields
+
+
+class EquipmentDiagnosisRecordListSerializer(EquipmentDiagnosisRecordSerializer):
+    """列表用：不返回完整采样序列。
+
+    EquipmentDiagnosisRecord.series 可能包含上万行采样点，列表接口按页返回时会把响应
+    撑到上百 MB；列表只需要样本数、状态和告警这些汇总字段，明细走详情接口。
+    """
+
+    class Meta(EquipmentDiagnosisRecordSerializer.Meta):
+        fields = [
+            field
+            for field in EquipmentDiagnosisRecordSerializer.Meta.fields
+            if field != "series"
+        ]
+        read_only_fields = fields

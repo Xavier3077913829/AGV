@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import io
 import math
+import re
 import warnings
 import zipfile
 from pathlib import Path
@@ -43,6 +44,15 @@ MONTH_TOKENS = (
     "jan", "feb", "mar", "apr", "may", "jun",
     "jul", "aug", "sep", "oct", "nov", "dec",
 )
+
+# 表头脚注：行业名尾部会带上标或普通数字（如 "New Orders4"、"…industries2"）
+FOOTNOTE_SUFFIX = re.compile(r"\s*[\d\u00b9\u00b2\u00b3\u2070-\u209f]+$")
+
+
+def _clean_industry(raw: str) -> str:
+    """清理行业名：省略号、句点，以及表头脚注数字。"""
+    text = str(raw).replace("…", "").replace(".", "").strip()
+    return FOOTNOTE_SUFFIX.sub("", text).strip()
 
 
 def _read_csv_from_zip(zip_path: Path, suffix: str = ".csv") -> pd.DataFrame:
@@ -140,11 +150,18 @@ def build_online_retail(
 
     if fill_missing_days:
         series = daily.set_index(pd.to_datetime(daily["date"]))["order_count"].asfreq("D")
+        filled_days = int(series.isna().sum())
         series = series.interpolate(limit_direction="both").round().astype(int)
+        # 该零售商周六闭店（原始数据里没有任何周六交易），插值会凭空造出一个营业日，
+        # 因此把周六显式记为 0 单，避免把补出来的数字当成真实订单量。
+        closed_saturday = series.index.dayofweek == 5
+        closed_days = int(closed_saturday.sum())
+        series[closed_saturday] = 0
         filled = series.reset_index()
         filled.columns = ["date", "order_count"]
         filled["date"] = filled["date"].dt.strftime("%Y-%m-%d")
         daily = filled
+        print(f"[Retail] 补齐缺失日 {filled_days} 天；其中周六闭店 {closed_days} 天，按 0 单计")
 
     out = out_dir / "online_retail_daily.csv"
     daily.to_csv(out, index=False, encoding="utf-8")
@@ -181,7 +198,14 @@ def build_m3(zip_path: Path, out_dir: Path) -> list[Path]:
 
             month_row, year_row = _find_header_rows(book)
             month_tokens = [str(value).strip() for value in book.iloc[month_row].tolist()]
-            year_tokens = [str(value).strip() for value in book.iloc[year_row].tolist()]
+            # 年份行的合并单元格读进来是空值：先按原值向前填充（NaN 才能被填充），
+            # 再统一转字符串，避免 "nan" 字符串把填充截断。
+            year_tokens = (
+                pd.Series(book.iloc[year_row].tolist())
+                .ffill()
+                .map(lambda value: "" if pd.isna(value) else str(value).strip())
+                .tolist()
+            )
             value_columns = [
                 column
                 for column, token in enumerate(month_tokens)
@@ -191,11 +215,12 @@ def build_m3(zip_path: Path, out_dir: Path) -> list[Path]:
                 continue
 
             records = []
+            skipped_columns: set[int] = set()
             for row_index in range(year_row + 1, len(book)):
                 industry = book.iat[row_index, 0]
                 if pd.isna(industry) or not str(industry).strip():
                     continue
-                name_text = str(industry).replace("…", "").replace(".", "").strip()
+                name_text = _clean_industry(industry)
                 if len(name_text) < 3:
                     continue
                 for column in value_columns:
@@ -204,21 +229,29 @@ def build_m3(zip_path: Path, out_dir: Path) -> list[Path]:
                         continue
                     month_text = month_tokens[column].lower().rstrip(".")[:3]
                     month_number = MONTH_TOKENS.index(month_text) + 1
-                    year_text = "".join(ch for ch in year_tokens[column] if ch.isdigit())
-                    year = int(year_text[:4]) if len(year_text) >= 4 else 0
+                    year_text = "".join(
+                        ch for ch in str(year_tokens[column]) if ch.isdigit()
+                    )
+                    if len(year_text) < 4:
+                        # 年份单元格缺失：宁可跳过该列，也不要写出无法归属月份的 ????-MM
+                        skipped_columns.add(column)
+                        continue
+                    year = int(year_text[:4])
                     records.append(
                         {
                             "industry": name_text,
-                            "month": (
-                                f"{year:04d}-{month_number:02d}"
-                                if year
-                                else f"????-{month_number:02d}"
-                            ),
+                            "month": f"{year:04d}-{month_number:02d}",
+                            # 原始表格列号：同一(行业, 月份)的季调/未季调/年累计列块靠它区分
+                            "source_column": column,
                             "value": float(value),
                         }
                     )
             if not records:
                 continue
+            if skipped_columns:
+                print(
+                    f"[M3] {Path(name).stem}: 跳过 {len(skipped_columns)} 个无法解析年份的列"
+                )
             out = out_dir / f"{Path(name).stem.replace(' ', '_')}_long.csv"
             pd.DataFrame(records).to_csv(out, index=False, encoding="utf-8")
             written.append(out)

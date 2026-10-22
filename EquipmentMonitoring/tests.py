@@ -3,6 +3,8 @@ from rest_framework.test import APIClient
 
 from .models import EquipmentDiagnosisRecord
 from .services import (
+    DATASET_LIMIT_DEFAULT,
+    DATASET_LIMIT_MAX,
     diagnose_equipment,
     generate_demo_series,
     get_model_bundle,
@@ -111,3 +113,86 @@ class MultiDatasetDiagnoseTests(TestCase):
         resp = client.post("/api/equipment/diagnose/", {"dataset": "nasa_milling"}, format="json")
         self.assertEqual(resp.status_code, 200)
         self.assertGreater(len(resp.json()["feature_importance"]), 5)
+
+
+class EquipmentDatasetApiTests(TestCase):
+    """真实数据集接口：样本上限、名称校验与错误码。"""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.host = {"HTTP_HOST": "localhost"}
+
+    def test_overview_rejects_unknown_data_source(self):
+        response = self.client.get(
+            "/api/equipment/overview/?data_source=not-a-dataset", **self.host
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_model_rejects_unknown_data_source(self):
+        response = self.client.get(
+            "/api/equipment/model/?data_source=not-a-dataset", **self.host
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_datasets_endpoint_lists_ai4i(self):
+        response = self.client.get("/api/equipment/datasets/", **self.host)
+        self.assertEqual(response.status_code, 200)
+        names = [item["name"] for item in response.data["datasets"]]
+        self.assertIn("ai4i_equipment", names)
+
+    def test_sample_uses_default_limit(self):
+        response = self.client.get(
+            "/api/equipment/sample/?dataset=ai4i_equipment", **self.host
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["sample_count"], DATASET_LIMIT_DEFAULT)
+
+    def test_sample_limit_is_capped(self):
+        response = self.client.get(
+            "/api/equipment/sample/?dataset=ai4i_equipment&limit=99999", **self.host
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["sample_count"], DATASET_LIMIT_MAX)
+
+    def test_sample_limit_accepts_explicit_value(self):
+        response = self.client.get(
+            "/api/equipment/sample/?dataset=ai4i_equipment&limit=30", **self.host
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["sample_count"], 30)
+
+    def test_dataset_name_cannot_escape_dataset_dir(self):
+        response = self.client.get(
+            "/api/equipment/sample/?dataset=../forecast/online_retail_daily", **self.host
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("不存在", response.data["detail"])
+
+    def test_diagnose_with_dataset_is_bounded(self):
+        response = self.client.post(
+            "/api/equipment/diagnose/",
+            {"dataset": "ai4i_equipment", "data_source": "ai4i_equipment"},
+            format="json",
+            **self.host,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["sample_count"], DATASET_LIMIT_DEFAULT)
+        self.assertIn("series", response.data)  # 诊断结果仍带采样序列，前端曲线要用
+
+    def test_rule_alerts_are_deduplicated(self):
+        result = diagnose_equipment(generate_demo_series("fault", points=200))
+        messages = [alert["message"] for alert in result["rule_alerts"]]
+        self.assertEqual(len(messages), len(set(messages)))
+        self.assertGreaterEqual(
+            sum(alert["count"] for alert in result["rule_alerts"]), len(messages)
+        )
+
+    def test_record_list_does_not_embed_series(self):
+        self.client.post(
+            "/api/equipment/diagnose/", {"sample": "worn"}, format="json", **self.host
+        )
+        response = self.client.get("/api/equipment/records/", **self.host)
+        self.assertEqual(response.status_code, 200)
+        rows = response.data["results"] if isinstance(response.data, dict) else response.data
+        self.assertTrue(rows)
+        self.assertNotIn("series", rows[0])
