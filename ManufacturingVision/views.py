@@ -15,6 +15,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from . import datasets
+from . import services_supervised
 from .models import VisionRecord
 from .serializers import VisionRecordSerializer
 from .services import (
@@ -78,6 +79,8 @@ def _save_record(task_type, source, input_name, image, annotated, analysis, obje
             "width": analysis.get("width"),
             "height": analysis.get("height"),
             "class_counts": analysis.get("class_counts", {}),
+            "algorithm": analysis.get("algorithm", "opencv"),
+            "fallback": bool(analysis.get("fallback", False)),
         },
     )
     stem = f"{task_type}_{uuid.uuid4().hex[:10]}"
@@ -99,8 +102,24 @@ class CrackDetectView(APIView):
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-        analysis = analyze_crack(image, params)
-        annotated = annotate_crack(image, analysis)
+        algorithm = str(params.get("algorithm", "deepcrack")).strip().lower()
+        use_deepcrack = algorithm in {"deepcrack", "supervised", "dl"}
+        fallback = False
+        if use_deepcrack:
+            try:
+                analysis = services_supervised.analyze_crack_supervised(image, params)
+                annotated = services_supervised.annotate_crack_supervised(image, analysis)
+            except (RuntimeError, ImportError) as exc:
+                analysis = analyze_crack(image, params)
+                annotated = annotate_crack(image, analysis)
+                analysis["fallback_reason"] = str(exc)
+                fallback = True
+        else:
+            analysis = analyze_crack(image, params)
+            annotated = annotate_crack(image, analysis)
+
+        analysis["algorithm"] = "frangi" if fallback else ("deepcrack" if use_deepcrack else "frangi")
+        analysis["fallback"] = fallback
         record = _save_record(
             VisionRecord.TaskType.CRACK, source, input_name, image, annotated, analysis,
             [{"box": box} for box in analysis["boxes"]],
@@ -108,12 +127,17 @@ class CrackDetectView(APIView):
         return Response({
             "success": True,
             "task_type": "crack",
+            "algorithm": analysis["algorithm"],
+            "fallback": analysis["fallback"],
             "result": analysis["result"],
             "count": analysis["count"],
             "localized": analysis["localized"],
             "score": analysis["score"],
             "max_response": analysis["max_response"],
             "strongest_component": analysis["strongest_component"],
+            "coverage": analysis.get("coverage"),
+            "max_prob": analysis.get("max_prob"),
+            "mean_prob": analysis.get("mean_prob"),
             "boxes": analysis["boxes"],
             "image_url": record.result_image.url,
             "input_image_url": record.input_image.url,

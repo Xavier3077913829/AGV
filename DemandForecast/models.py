@@ -9,6 +9,7 @@ class DemandForecastRun(models.Model):
         MOVING_AVERAGE = "moving_average", "移动平均"
         HOLT_WINTERS = "holt_winters", "Holt-Winters"
         ARIMA = "arima", "ARIMA"
+        LIGHTGBM = "lightgbm", "LightGBM（日历+滞后）"
 
     class Source(models.TextChoices):
         DATASET = "dataset", "内置样例"

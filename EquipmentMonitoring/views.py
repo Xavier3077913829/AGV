@@ -24,14 +24,15 @@ from .services import (
 )
 
 
-def _records_from_request(request) -> tuple[list[dict], str]:
+def _records_from_request(request) -> tuple[list[dict], str, str]:
     upload = request.FILES.get("file") or request.FILES.get("csv")
     if upload is not None:
         try:
             frame = pd.read_csv(upload)
         except Exception as exc:  # pragma: no cover - pandas 具体异常类型随版本变化
             raise EquipmentMonitoringError(f"CSV 读取失败：{exc}") from exc
-        return frame.to_dict(orient="records"), EquipmentDiagnosisRecord.Source.UPLOAD
+        return (frame.to_dict(orient="records"),
+                EquipmentDiagnosisRecord.Source.UPLOAD, "synthetic")
 
     raw_records = request.data.get("records")
     if raw_records is not None:
@@ -42,7 +43,7 @@ def _records_from_request(request) -> tuple[list[dict], str]:
                 raise EquipmentMonitoringError("records 必须是 JSON 数组。") from exc
         if not isinstance(raw_records, list):
             raise EquipmentMonitoringError("records 必须是数组。")
-        return raw_records, EquipmentDiagnosisRecord.Source.MANUAL
+        return raw_records, EquipmentDiagnosisRecord.Source.MANUAL, "synthetic"
 
     dataset = str(request.data.get("dataset") or "").strip()
     if dataset:
@@ -50,6 +51,7 @@ def _records_from_request(request) -> tuple[list[dict], str]:
         return (
             load_dataset_records(dataset, limit=request.data.get("limit")),
             EquipmentDiagnosisRecord.Source.DATASET,
+            dataset,
         )
 
     scenario = str(request.data.get("sample") or request.data.get("scenario") or "")
@@ -57,6 +59,7 @@ def _records_from_request(request) -> tuple[list[dict], str]:
         return (
             generate_demo_series(scenario=scenario),
             EquipmentDiagnosisRecord.Source.DATASET,
+            "synthetic",
         )
 
     raise EquipmentMonitoringError(
@@ -68,6 +71,7 @@ class EquipmentOverviewView(APIView):
     def get(self, request):
         total = EquipmentDiagnosisRecord.objects.count()
         source = str(request.query_params.get("data_source") or "synthetic")
+        model_type = str(request.query_params.get("model_type") or "auto")
         state_counts = {
             item["predicted_state"]: item["count"]
             for item in EquipmentDiagnosisRecord.objects.values("predicted_state").annotate(
@@ -78,7 +82,7 @@ class EquipmentOverviewView(APIView):
             EquipmentDiagnosisRecord.objects.aggregate(value=Avg("confidence"))["value"] or 0
         )
         try:
-            model_metrics = get_model_bundle(source)["metrics"]
+            model_metrics = get_model_bundle(source, model_type=model_type)["metrics"]
         except EquipmentMonitoringError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(
@@ -147,13 +151,16 @@ class EquipmentSampleView(APIView):
 class EquipmentModelView(APIView):
     def get(self, request):
         source = str(request.query_params.get("data_source") or "synthetic")
+        model_type = str(request.query_params.get("model_type") or "auto")
+        use_smote = str(request.query_params.get("use_smote") or "0") not in {"0", "false", "no"}
         try:
-            bundle = get_model_bundle(source)
+            bundle = get_model_bundle(source, model_type=model_type, use_smote=use_smote)
         except EquipmentMonitoringError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(
             {
-                "algorithm": "StandardScaler + RandomForestClassifier",
+                "algorithm": bundle["algorithm"],
+                "model_type": bundle["model_type"],
                 "data_source": source,
                 "features": bundle["features"],
                 "feature_importance": bundle["feature_importance"],
@@ -168,11 +175,23 @@ class EquipmentDiagnoseView(APIView):
 
     def post(self, request):
         try:
-            records, source = _records_from_request(request)
+            records, source, data_source = _records_from_request(request)
             equipment_code = str(request.data.get("equipment_code") or "CNC-01")
-            data_source = str(request.data.get("data_source") or "synthetic")
+            # 显式传入优先；否则沿用 _records_from_request 推断出的同源数据集
+            data_source = str(request.data.get("data_source") or data_source)
+            model_type = str(request.data.get("model_type") or "auto")
+            use_smote = str(request.data.get("use_smote") or "0") not in {"0", "false", "no"}
+            try:
+                worn_threshold = float(request.data.get("worn_threshold") or 0.6)
+            except (TypeError, ValueError):
+                worn_threshold = 0.6
             result = diagnose_equipment(
-                records, equipment_code=equipment_code, data_source=data_source
+                records,
+                equipment_code=equipment_code,
+                data_source=data_source,
+                model_type=model_type,
+                use_smote=use_smote,
+                worn_threshold=worn_threshold,
             )
         except EquipmentMonitoringError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
