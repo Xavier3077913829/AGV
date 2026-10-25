@@ -25,10 +25,17 @@ from .services import (
 def _history_from_request(request) -> tuple[list[dict], str]:
     upload = request.FILES.get("file") or request.FILES.get("csv")
     if upload is not None:
-        try:
-            frame = pd.read_csv(upload)
-        except Exception as exc:  # pragma: no cover
-            raise DemandForecastError(f"CSV 读取失败：{exc}") from exc
+        frame = None
+        last_exc = None
+        for enc in ("utf-8-sig", "gbk", "utf-8", "latin-1"):
+            try:
+                upload.seek(0)
+                frame = pd.read_csv(upload, encoding=enc)
+                break
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+        if frame is None:
+            raise DemandForecastError(f"CSV 读取失败：{last_exc}")
         return frame.to_dict(orient="records"), DemandForecastRun.Source.UPLOAD
 
     raw_history = request.data.get("history")

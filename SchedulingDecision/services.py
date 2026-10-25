@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import heapq
 import random
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Iterable
@@ -11,6 +12,11 @@ from django.db import transaction
 from django.utils import timezone
 
 from .models import AGV, DispatchRecord, MapEdge, MapNode, ScheduleRun, TransportTask
+
+# 单机多任务顺序优化的精确 DP 只在小规模下启用（指数复杂度）。
+# 主链路（多 AGV 调度）用的是「最优插入 + VND」，不依赖这里；
+# 把 DP 视作可选的精确性对照实验，改小/关闭不影响主流程。
+EXACT_DP_MAX_TASKS = 10
 
 
 MIN_BATTERY_PERCENT = 15.0
@@ -472,13 +478,17 @@ def _two_opt_single_order(
 def optimize_single_order(
     agv: AGV, tasks: list[TransportTask], router: GraphRouter
 ) -> list[int]:
-    """单台多任务顺序优化：小规模精确 DP，大规模最近邻 + 2-opt。"""
+    """单台多任务顺序优化：小规模精确 DP（可选），大规模最近邻 + 2-opt。
+
+    DP 只在 ``len(tasks) <= EXACT_DP_MAX_TASKS`` 时作为“精确性对照”启用，
+    超出则走启发式；主链路（多 AGV 调度）用的是最优插入 + VND，与此无关。
+    """
     if len(tasks) <= 1:
         return [task.id for task in tasks]
     task_map = {task.id: task for task in tasks}
     task_ids = [task.id for task in tasks]
 
-    if len(tasks) <= 10:
+    if len(tasks) <= EXACT_DP_MAX_TASKS:
         dp: dict[tuple[int, int], tuple[float, tuple[int, ...]]] = {}
         for index, task in enumerate(tasks):
             distance = _first_task_distance(router, agv.current_node_id, task)
@@ -699,36 +709,48 @@ def improve_solution_vns(
     now: datetime,
     weights: dict[str, float] | None = None,
     max_rounds: int = 50,
-    max_neighbors: int = 350,
+    max_neighbors: int = 120,
+    time_budget: float = 3.0,
 ) -> tuple[ScheduleEvaluation, int]:
     """变邻域下降（VND）：交替使用 relocate / swap / or-opt / 2-opt 四种邻域。
 
     - 任一邻域找到改进（首次改进即接受）就回到第一个邻域重新搜索；
     - 四个邻域都无法改进时结束；
-    - 邻居数超过 max_neighbors 时按固定种子随机采样，保证结果可复现。
+    - 邻居数超过 max_neighbors 时按固定种子随机采样，保证结果可复现；
+    - ``time_budget`` 为墙钟时间上限（秒）：到点立即返回当前最优解，
+      保证演示与接口响应不被大规模算例拖死。
     """
     current = initial
     iterations = 0
     rng = random.Random(20260928)
     task_ids = list(tasks)
     agv_ids = [agv.id for agv in agvs]
+    # 大规模算例下只对采样子集生成邻域：控制单次 move 生成的耗时，
+    # 否则 100 任务 × 13 车会产生上百万候选、一次构建就可能超过时间预算。
+    active_tasks = task_ids if len(task_ids) <= 40 else rng.sample(task_ids, 40)
+    active_agvs = agv_ids if len(agv_ids) <= 5 else rng.sample(agv_ids, 5)
     builders = (
-        lambda orders: _build_relocate_moves(orders, task_ids, agv_ids),
-        lambda orders: _build_swap_moves(orders, agv_ids),
-        lambda orders: _build_or_opt_moves(orders, agv_ids),
-        lambda orders: _build_two_opt_moves(orders, agv_ids),
+        lambda orders: _build_relocate_moves(orders, active_tasks, active_agvs),
+        lambda orders: _build_swap_moves(orders, active_agvs),
+        lambda orders: _build_or_opt_moves(orders, active_agvs),
+        lambda orders: _build_two_opt_moves(orders, active_agvs),
     )
 
     rounds = 0
     stalled = 0
     neighborhood = 0
+    deadline = time.monotonic() + max(0.0, float(time_budget))
     while rounds < max_rounds and stalled < len(builders):
+        if time.monotonic() > deadline:
+            break
         rounds += 1
         moves = builders[neighborhood](current.orders)
         if len(moves) > max_neighbors:
             moves = rng.sample(moves, max_neighbors)
         improved = False
         for candidate in moves:
+            if time.monotonic() > deadline:
+                break
             iterations += 1
             evaluation = evaluate_solution(tasks, agvs, candidate, router, now, weights)
             if evaluation.feasible and evaluation.objective < current.objective - 1e-7:

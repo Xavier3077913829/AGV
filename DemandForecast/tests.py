@@ -61,6 +61,16 @@ class ForecastApiTests(TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
+
+class ForecastModelNameTests(TestCase):
+    def test_model_name_includes_lightgbm(self):
+        from .models import DemandForecastRun
+
+        values = dict(DemandForecastRun.ModelName.choices).values()
+        self.assertIn("LightGBM", "".join(values))
+        self.assertIn("lightgbm", dict(DemandForecastRun.ModelName.choices))
+
+
 class ForecastDatasetApiTests(TestCase):
     """真实订单序列接口与频率推断。"""
 

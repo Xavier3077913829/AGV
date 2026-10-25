@@ -14,7 +14,9 @@
 
 1. 对发送到接口的 CSV 或 JSON 记录进行字段与数值校验。
 2. 使用标准化器消除不同传感器量纲差异。
-3. 使用随机森林分类器输出 `normal`、`worn`、`fault` 三类状态及置信度。
+3. 使用梯度提升分类器输出 `normal`、`worn`、`fault` 三类状态及置信度；
+   默认按可用性自动选择 `LightGBM → XGBoost → HistGradientBoosting → 随机森林`，
+   并通过类别权重（或 SMOTE 过采样）缓解 `worn` 类样本过少的问题。
 4. 使用温度和振动等机理阈值进行规则告警，补充模型判断。
 5. 输出状态分布、特征统计、特征重要性和传感器趋势序列，供前端可视化。
 
@@ -37,6 +39,20 @@
 }
 ```
 
+可选的 `model_type` 与 `use_smote` 参数（`/model/`、`/overview/`、`/diagnose/` 均支持）：
+
+- `model_type`：`auto`（默认）、`lightgbm`、`xgboost`、`hist_gradient_boosting`、`random_forest`；
+- `use_smote`：`1`（默认，安装 imbalanced-learn 后启用 SMOTE）或 `0`（退化为类别权重）。
+
+```json
+{
+  "sample": "worn",
+  "equipment_code": "CNC-01",
+  "model_type": "lightgbm",
+  "use_smote": "1"
+}
+```
+
 上传 CSV 时使用 multipart 字段 `file`。
 
 ## 真实数据集（可选）
@@ -56,7 +72,9 @@ GET  /api/equipment/sample/?dataset=ai4i_equipment&limit=200
 POST /api/equipment/diagnose/  {"dataset": "ai4i_equipment", "limit": 200, "data_source": "ai4i_equipment"}
 ```
 
-不传 `data_source` 时仍使用内置合成数据训练，原有行为不变。
+不传 `data_source` 时仍使用内置合成数据训练，原有行为不变。新增依赖
+`lightgbm / xgboost / imbalanced-learn` 已写入 `requirements.txt`；未安装时模块会
+自动降级到 sklearn 内置的 `HistGradientBoosting`，接口仍可正常返回。
 
 **实测对比（同一套模型代码）**
 

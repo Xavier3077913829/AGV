@@ -27,6 +27,17 @@ const records = ref([])
 const running = ref(false)
 const loadingRecords = ref(false)
 const error = ref('')
+// 磨损（worn）预警阈值：0.6 精确优先 / 0.1 高召回（宁可误报不漏报）
+const wornThreshold = ref(0.6)
+const WORN_PRESETS = [
+  { value: 0.6, label: '0.6 精确优先（误报少）' },
+  { value: 0.3, label: '0.3 平衡' },
+  { value: 0.1, label: '0.1 高召回（宁可误报）' },
+]
+// 训练数据集对比（ai4i 46 条 worn vs NASA 铣削 760 条）
+const datasetCompare = ref([])
+const loadingCompare = ref(false)
+const compareBest = ref('')
 
 const feature = computed(
   () => FEATURES.find((item) => item.key === selectedFeature.value) || FEATURES[0],
@@ -41,6 +52,23 @@ const stateRows = computed(() => {
     ratio: value.ratio || 0,
     color: STATE_COLORS[key] || '#89979d',
   }))
+})
+
+const wornWarning = computed(() => result.value?.worn_warning || null)
+const wornScorePct = computed(() => Math.round((wornWarning.value?.worn_score || 0) * 100))
+const anomalyInfo = computed(() => {
+  const a = result.value?.anomaly
+  if (!a || !a.available) return null
+  return a
+})
+const anomalyHigh = computed(() => {
+  const a = anomalyInfo.value
+  if (!a) return false
+  const score = Number(a.latest_score || 0)
+  const thr = Number(a.threshold_q95 || Infinity)
+  const flagged = Number(a.flagged || 0)
+  // 与后端一致：有点被判异常，或最新分超过 95% 分位阈值
+  return flagged > 0 || score >= thr
 })
 
 const lineChart = computed(() => {
@@ -105,6 +133,19 @@ async function loadOverview() {
   }
 }
 
+async function loadDatasetCompare() {
+  loadingCompare.value = true
+  try {
+    const data = await api.equipmentDatasetCompare()
+    datasetCompare.value = data.datasets || []
+    compareBest.value = data.best_worn || ''
+  } catch (err) {
+    notify(`数据集对比加载失败：${err.message}`, 'error')
+  } finally {
+    loadingCompare.value = false
+  }
+}
+
 async function loadRecords() {
   loadingRecords.value = true
   try {
@@ -126,10 +167,12 @@ async function runDiagnosis() {
       payload = new FormData()
       payload.append('file', file.value)
       payload.append('equipment_code', equipmentCode.value || 'CNC-01')
+      payload.append('worn_threshold', String(wornThreshold.value))
     } else {
       payload = {
         sample: scenario.value,
         equipment_code: equipmentCode.value || 'CNC-01',
+        worn_threshold: wornThreshold.value,
       }
     }
     result.value = await api.equipmentDiagnose(payload)
@@ -151,6 +194,7 @@ function openRecords() {
 
 onMounted(() => {
   loadOverview()
+  loadDatasetCompare()
 })
 
 onUnmounted(() => {
@@ -179,6 +223,59 @@ onUnmounted(() => {
         <div class="mini-stat panel"><span>状态类别</span><strong>3</strong></div>
       </div>
 
+      <!-- 训练数据集对比：ai4i（46 条 worn）vs NASA 铣削（760 条 worn） -->
+      <section class="panel mt-16">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title">训练数据集对比（worn 类效果）</div>
+            <div class="panel-desc">
+              同一套 LightGBM 流程，只更换训练数据：ai4i 仅 46 条 worn，NASA 铣削 760 条，Figshare 铣削 315 条
+            </div>
+          </div>
+          <div class="toolbar-right">
+            <span v-if="compareBest" class="tag">worn-F1 最优：{{ compareBest }}</span>
+            <button class="btn btn-sm" :disabled="loadingCompare" @click="loadDatasetCompare">
+              {{ loadingCompare ? '计算中...' : '重新对比' }}
+            </button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>数据集</th><th>样本数</th><th>worn 样本</th><th>特征数</th>
+                  <th>准确率</th><th>macro-F1</th><th>worn-F1</th><th>fault F1</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in datasetCompare" :key="row.dataset">
+                  <td class="cell-main">{{ row.dataset }}</td>
+                  <td>{{ row.rows ?? '--' }}</td>
+                  <td>{{ row.worn_count ?? '--' }}</td>
+                  <td>{{ row.features ?? '--' }}</td>
+                  <td>{{ row.accuracy != null ? (row.accuracy * 100).toFixed(1) + '%' : '--' }}</td>
+                  <td>{{ row.macro_f1 ?? '--' }}</td>
+                  <td>
+                    <strong :style="{ color: row.dataset === compareBest ? '#2b9a76' : '#5f7179' }">
+                      {{ row.worn_f1 ?? '--' }}
+                    </strong>
+                  </td>
+                  <td>{{ row.fault_f1 ?? '--' }}</td>
+                </tr>
+                <tr v-if="!datasetCompare.length">
+                  <td colspan="8"><div class="empty">暂无对比数据（可点右上角「重新对比」）</div></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="notice mt-12">
+            说明：NASA 铣削数据没有温度/转速两列（用常数占位），因此作为**独立磨损数据集**验证方法有效性，
+            不直接并入 ai4i 模型；worn-F1 由 5 折交叉验证的同分布评估得到。
+          </div>
+        </div>
+      </section>
+
       <div v-if="subTab === 'diagnose'" class="grid equipment-grid mt-16">
         <section class="panel">
           <div class="panel-head"><div><div class="panel-title">数据配置</div><div class="panel-desc">使用内置样例或上传带传感器列的 CSV</div></div></div>
@@ -203,7 +300,13 @@ onUnmounted(() => {
                   <option value="fault">设备故障</option>
                 </select>
               </div>
-              <div v-else class="field full">
+              <div class="field">
+                <label>磨损灵敏度（worn 阈值）</label>
+                <select v-model.number="wornThreshold" class="select">
+                  <option v-for="item in WORN_PRESETS" :key="item.value" :value="item.value">{{ item.label }}</option>
+                </select>
+              </div>
+              <div v-if="sourceKind === 'upload'" class="field full">
                 <label>传感器 CSV（温度、振动、电流、转速、磨损列）</label>
                 <input class="input" type="file" accept=".csv,text/csv" @change="onFileChange" />
               </div>
@@ -216,7 +319,7 @@ onUnmounted(() => {
               <button class="btn btn-primary" :disabled="running" @click="runDiagnosis">
                 {{ running ? '正在诊断...' : '开始诊断' }}
               </button>
-              <span class="muted small">模型：RandomForest + 规则告警</span>
+              <span class="muted small">模型：{{ result?.algorithm || 'LightGBM' }} + 规则告警 + 磨损检测头</span>
             </div>
             <div v-if="error" class="notice warning mt-12">{{ error }}</div>
           </div>
@@ -235,6 +338,51 @@ onUnmounted(() => {
               <div class="optimization-metric"><span>规则告警</span><strong>{{ result.rule_alerts.length }}</strong></div>
             </div>
             <div v-else class="empty">请选择样例或上传 CSV 后开始诊断</div>
+
+            <div v-if="wornWarning" class="worn-card mt-12" :class="{ alarm: wornWarning.worn_alert }">
+              <div class="worn-head">
+                <span class="worn-lamp" :class="{ on: wornWarning.worn_alert }"></span>
+                <strong>刀具磨损预警</strong>
+                <span class="worn-state" :class="{ on: wornWarning.worn_alert }">
+                  {{ wornWarning.worn_alert ? '需要换刀' : '磨损正常' }}
+                </span>
+                <span class="muted small">检测头 AUROC {{ wornWarning.detector_metrics?.auroc ?? '--' }}</span>
+              </div>
+              <div class="worn-score-row">
+                <span class="muted small">worn 概率</span>
+                <div class="worn-track">
+                  <div class="worn-fill" :style="{ width: `${wornScorePct}%` }"></div>
+                  <div class="worn-threshold-mark" :style="{ left: `${(wornWarning.worn_threshold || 0.6) * 100}%` }"></div>
+                </div>
+                <strong>{{ wornScorePct }}%</strong>
+              </div>
+              <div class="worn-foot">
+                <span class="muted small">阈值 {{ wornWarning.worn_threshold }}</span>
+                <span v-if="wornWarning.error" class="small" style="color:#cf5260">{{ wornWarning.error }}</span>
+                <span v-else class="muted small">概率超过阈值即亮红灯（阈值越低越灵敏）</span>
+              </div>
+            </div>
+
+            <div v-if="anomalyInfo" class="anomaly-card mt-12" :class="{ alarm: anomalyHigh }">
+              <div class="anomaly-head">
+                <span class="anomaly-lamp" :class="{ on: anomalyHigh }"></span>
+                <strong>无监督异常检测（{{ anomalyInfo.method || 'PyOD' }}）</strong>
+                <span class="anomaly-state" :class="{ on: anomalyHigh }">
+                  {{ anomalyHigh ? '偏离正常分布' : '接近正常分布' }}
+                </span>
+                <span class="muted small">无需标签 · 用于发现训练集里没有的异常</span>
+              </div>
+              <div class="anomaly-grid">
+                <div><span class="muted small">最新异常分</span><strong>{{ anomalyInfo.latest_score ?? '--' }}</strong></div>
+                <div><span class="muted small">异常阈值(正常样本99%分位)</span><strong>{{ anomalyInfo.threshold_q95 ?? '--' }}</strong></div>
+                <div><span class="muted small">越线点数</span><strong>{{ anomalyInfo.flagged ?? 0 }} / {{ result?.sample_count ?? 0 }}</strong></div>
+                <div><span class="muted small">越线占比</span><strong>{{ ((anomalyInfo.flagged_ratio || 0) * 100).toFixed(1) }}%</strong></div>
+              </div>
+              <div class="anomaly-foot muted small">
+                基准：用同源 <b>{{ anomalyInfo.normal_samples ?? '--' }}</b> 条正常样本训练（{{ anomalyInfo.score_source || 'synthetic' }}）。
+                分数越高越偏离正常；越线占比 0% 表示与正常分布一致，占比越高说明整段越漂移。
+              </div>
+            </div>
 
             <template v-if="result">
               <div class="section-toolbar mt-16">
@@ -308,4 +456,33 @@ onUnmounted(() => {
 .state-bars { display: grid; gap: 9px; }
 .state-bar-row { display: grid; grid-template-columns: 56px minmax(0, 1fr) 40px; gap: 10px; align-items: center; color: #5f7179; font-size: 11px; }
 @media (max-width: 980px) { .equipment-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---- 磨损（worn）预警卡片 ---- */
+.worn-card { border: 1px solid #e1e8e5; border-radius: 10px; padding: 12px 14px; background: #f8faf9; display: grid; gap: 9px; }
+.worn-card.alarm { border-color: #f0b4bb; background: #fdf3f4; }
+.worn-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; }
+.worn-lamp { width: 11px; height: 11px; border-radius: 50%; background: #2b9a76; box-shadow: 0 0 0 3px rgba(43,154,118,.15); }
+.worn-lamp.on { background: #cf5260; box-shadow: 0 0 0 3px rgba(207,82,96,.2); animation: worn-blink 1.2s infinite; }
+.worn-state { font-size: 11px; color: #2b9a76; }
+.worn-state.on { color: #cf5260; font-weight: 600; }
+.worn-score-row { display: grid; grid-template-columns: 60px minmax(0,1fr) 48px; gap: 10px; align-items: center; font-size: 12px; }
+.worn-track { position: relative; height: 10px; border-radius: 6px; background: #e8efec; overflow: hidden; }
+.worn-fill { height: 100%; border-radius: 6px; background: linear-gradient(90deg, #2b9a76, #d2902e 60%, #cf5260); transition: width .3s ease; }
+.worn-threshold-mark { position: absolute; top: -2px; bottom: -2px; width: 2px; background: #34495e; opacity: .55; }
+.worn-foot { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+@keyframes worn-blink { 0%,100% { opacity: 1 } 50% { opacity: .45 } }
+
+/* ---- 无监督异常（PyOD ECOD）卡片 ---- */
+.anomaly-card { border: 1px solid #e1e8e5; border-radius: 10px; padding: 12px 14px; background: #f7f9fb; display: grid; gap: 9px; }
+.anomaly-card.alarm { border-color: #f2d3a8; background: #fdf8f1; }
+.anomaly-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; }
+.anomaly-lamp { width: 11px; height: 11px; border-radius: 50%; background: #2b9a76; box-shadow: 0 0 0 3px rgba(43,154,118,.15); }
+.anomaly-lamp.on { background: #d2902e; box-shadow: 0 0 0 3px rgba(210,144,46,.2); }
+.anomaly-state { font-size: 11px; color: #2b9a76; }
+.anomaly-state.on { color: #b8791f; font-weight: 600; }
+.anomaly-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.anomaly-grid > div { display: grid; gap: 2px; font-size: 12px; }
+.anomaly-grid strong { font-size: 15px; color: #2f3d44; }
+.anomaly-foot { line-height: 1.5; }
+@media (max-width: 980px) { .anomaly-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>

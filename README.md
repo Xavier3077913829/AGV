@@ -193,6 +193,16 @@ $PY = "C:\Users\ssync\miniconda3\envs\pmp\python.exe"
 & $PY manage.py runserver 127.0.0.1:8000
 ```
 
+做 20 条任务的调度演示时，可直接用：
+
+```powershell
+# 清空全部业务数据并重新生成 20 个待调度任务
+& $PY manage.py seed_demo --reset --task-count 20
+
+# 或只清空调度任务、调度记录和优化记录，保留地图与 AGV 位置/电量
+& $PY manage.py seed_demo --reset-tasks --task-count 20
+```
+
 如果 `python` 已加入 PATH 并指向正确的环境，也可以直接使用 `python manage.py ...`。
 
 `migrate` 会为全部 5 个应用建表（含 `SchedulingDecision`、`ManufacturingVision`、`EquipmentMonitoring`、`DemandForecast`）。
@@ -203,7 +213,7 @@ $PY = "C:\Users\ssync\miniconda3\envs\pmp\python.exe"
 - 103 条可通行道路
 - 10 个障碍区域
 - 4 台 AGV
-- 6 个待调度演示任务
+- 默认 6 个待调度演示任务；使用 `--task-count 20` 可生成 20 个
 - Django 管理员账号：`admin` / `Admin123!`
 
 后端地址：

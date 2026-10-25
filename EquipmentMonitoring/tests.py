@@ -8,6 +8,7 @@ from .services import (
     diagnose_equipment,
     generate_demo_series,
     get_model_bundle,
+    load_dataset_records,
 )
 
 
@@ -16,6 +17,21 @@ class EquipmentServiceTests(TestCase):
         metrics = get_model_bundle()["metrics"]
         self.assertGreaterEqual(metrics["accuracy"], 0.9)
         self.assertGreaterEqual(metrics["f1_macro"], 0.9)
+
+    def test_model_bundle_reports_algorithm_and_per_class_metrics(self):
+        bundle = get_model_bundle(model_type="random_forest", use_smote=False)
+        self.assertEqual(bundle["model_type"], "random_forest")
+        self.assertIn("f1_per_class", bundle["metrics"])
+        self.assertIn("algorithm", bundle["metrics"])
+
+    def test_diagnose_accepts_model_type(self):
+        result = diagnose_equipment(
+            generate_demo_series("worn", points=50),
+            model_type="random_forest",
+            use_smote=False,
+        )
+        self.assertEqual(result["model_type"], "random_forest")
+        self.assertIn(result["predicted_state"], {"worn", "fault"})
 
     def test_worn_sample_is_detected(self):
         result = diagnose_equipment(generate_demo_series("worn", points=50))
@@ -64,6 +80,40 @@ class EquipmentApiTests(TestCase):
             **self.host,
         )
         self.assertEqual(response.status_code, 400)
+
+
+
+class MultiDatasetDiagnoseTests(TestCase):
+    """回归：NASA / Figshare 等多特征数据集不再 500，且特征数与异常基准同源。"""
+
+    def test_nasa_milling_diagnose_matches_feature_count(self):
+        bundle = get_model_bundle("nasa_milling")
+        expected = len(bundle["features"])
+        result = diagnose_equipment(
+            load_dataset_records("nasa_milling", limit=120),
+            data_source="nasa_milling",
+        )
+        self.assertEqual(len(result["feature_importance"]), expected)
+        anomaly = result.get("anomaly") or {}
+        self.assertEqual(anomaly.get("score_source"), "nasa_milling")
+        # 越线统计必须落在 0~100% 之间
+        self.assertGreaterEqual(anomaly.get("flagged_ratio", 0), 0)
+        self.assertLessEqual(anomaly.get("flagged_ratio", 0), 1)
+
+    def test_figshare_diagnose_reports_extended_features(self):
+        result = diagnose_equipment(
+            load_dataset_records("figshare_milling", limit=120),
+            data_source="figshare_milling",
+        )
+        self.assertGreater(len(result["feature_importance"]), 50)
+        self.assertEqual((result.get("anomaly") or {}).get("score_source"), "figshare_milling")
+
+    def test_diagnose_api_accepts_dataset_parameter(self):
+        client = APIClient()
+        resp = client.post("/api/equipment/diagnose/", {"dataset": "nasa_milling"}, format="json")
+        self.assertEqual(resp.status_code, 200)
+        self.assertGreater(len(resp.json()["feature_importance"]), 5)
+
 
 class EquipmentDatasetApiTests(TestCase):
     """真实数据集接口：样本上限、名称校验与错误码。"""

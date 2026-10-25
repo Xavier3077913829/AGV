@@ -1,6 +1,7 @@
 """ManufacturingVision 算法 / 接口 / 管理命令测试。"""
 from __future__ import annotations
 
+import json
 import tempfile
 from pathlib import Path
 
@@ -9,10 +10,12 @@ import numpy as np
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.test import TestCase, override_settings
+from rest_framework.test import APIClient
 
 from . import datasets
 from .models import VisionRecord
 from .services import analyze_crack, analyze_workpiece
+from .services_supervised import supervised_available
 
 
 def _encode_png(image: np.ndarray) -> bytes:
@@ -107,14 +110,44 @@ class VisionApiTests(TestCase):
 
     def test_crack_upload(self):
         upload = SimpleUploadedFile("crack.png", _encode_png(_cracked_canvas()), "image/png")
-        response = self.client.post("/api/vision/crack/", {"image": upload})
+        response = self.client.post(
+            "/api/vision/crack/",
+            {"image": upload, "params": json.dumps({"algorithm": "frangi"})},
+        )
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertTrue(payload["success"])
         self.assertEqual(payload["task_type"], "crack")
         self.assertEqual(payload["result"], "crack")
+        self.assertEqual(payload["algorithm"], "frangi")
         self.assertTrue(payload["image_url"].startswith("/media/"))
         self.assertTrue(VisionRecord.objects.filter(id=payload["record_id"]).exists())
+
+    def test_crack_default_algorithm_reported(self):
+        upload = SimpleUploadedFile("crack.png", _encode_png(_cracked_canvas()), "image/png")
+        response = self.client.post("/api/vision/crack/", {"image": upload})
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn(payload["algorithm"], {"deepcrack", "frangi"})
+        self.assertIn("fallback", payload)
+
+    def test_crack_deepcrack_request_falls_back_without_weights(self):
+        upload = SimpleUploadedFile("crack.png", _encode_png(_cracked_canvas()), "image/png")
+        response = self.client.post(
+            "/api/vision/crack/",
+            {"image": upload, "params": json.dumps({"algorithm": "deepcrack"})},
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn(payload["algorithm"], {"deepcrack", "frangi"})
+        if not supervised_available():
+            self.assertTrue(payload["fallback"])
+            self.assertEqual(payload["algorithm"], "frangi")
+
+    def test_algo_status_reports_deepcrack(self):
+        payload = self.client.get("/api/vision/algo/status/").json()
+        self.assertIn("deepcrack", payload)
+        self.assertIn("weights_found", payload["deepcrack"])
 
     def test_detect_upload(self):
         upload = SimpleUploadedFile("part.png", _encode_png(_shape_canvas("circle")), "image/png")
@@ -166,7 +199,10 @@ class VisionApiTests(TestCase):
 
     def test_overview(self):
         upload = SimpleUploadedFile("crack.png", _encode_png(_cracked_canvas()), "image/png")
-        self.client.post("/api/vision/crack/", {"image": upload})
+        self.client.post(
+            "/api/vision/crack/",
+            {"image": upload, "params": json.dumps({"algorithm": "frangi"})},
+        )
         payload = self.client.get("/api/vision/overview/").json()
         self.assertEqual(payload["total"], 1)
         self.assertEqual(payload["crack_hits"], 1)
@@ -235,3 +271,20 @@ class ManagementCommandTests(TestCase):
             metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
             self.assertIn("detection", metrics)
             self.assertIn("classification", metrics)
+
+
+class AlgoInputGuardTests(TestCase):
+    def test_dataset_view_rejects_unsafe_input(self):
+        client = APIClient()
+        for payload in ({"category": "../evil"}, {"category": "a" * 40},
+                        {"dst_root": "../../etc"}):
+            resp = client.post("/api/vision/algo/dataset/", payload, format="json")
+            self.assertEqual(resp.status_code, 400, payload)
+
+    def test_patchcore_rejects_non_image_upload(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        client = APIClient()
+        upload = SimpleUploadedFile("a.txt", b"not an image", content_type="text/plain")
+        resp = client.post("/api/vision/algo/patchcore/", {"file": upload}, format="multipart")
+        self.assertIn(resp.status_code, (400, 503))

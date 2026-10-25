@@ -26,6 +26,31 @@ class SchedulingFlowTests(TestCase):
     def setUpTestData(cls):
         call_command("seed_demo", "--reset", verbosity=0)
 
+    def test_seed_demo_can_rebuild_twenty_tasks_without_replacing_base_data(self):
+        node_count = MapNode.objects.count()
+        agv_count = AGV.objects.count()
+        agv = AGV.objects.first()
+        original_node_id = agv.current_node_id
+        agv.battery_percent = 42
+        agv.status = AGV.Status.BUSY
+        agv.save(update_fields=["battery_percent", "status"])
+
+        call_command(
+            "seed_demo", "--reset-tasks", "--task-count", "20", verbosity=0
+        )
+
+        self.assertEqual(TransportTask.objects.count(), 20)
+        self.assertEqual(
+            TransportTask.objects.filter(status=TransportTask.Status.PENDING).count(),
+            20,
+        )
+        self.assertEqual(MapNode.objects.count(), node_count)
+        self.assertEqual(AGV.objects.count(), agv_count)
+        agv.refresh_from_db()
+        self.assertEqual(agv.current_node_id, original_node_id)
+        self.assertEqual(agv.battery_percent, 42)
+        self.assertEqual(agv.status, AGV.Status.IDLE)
+
     def test_single_dispatch_builds_route_and_updates_status(self):
         task = TransportTask.objects.filter(status=TransportTask.Status.PENDING).first()
         result = dispatch_single(task.id)

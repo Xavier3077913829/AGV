@@ -34,3 +34,19 @@ frontend/.env
 # --- 上传与运行时 ---
 *.pid
 *.sqlite3
+
+# --- 本地大文件 / 资料备份（不入库，避免超过 GitHub 100MB 限制）---
+vendor/
+runs/
+AGV (4)/
+AGV (4).zip
+*.whl
+*.pth
+*.pt
+*.ckpt
+*.onnx
+
+# --- 原始数据集与生成产物（体积大，按需自行下载）---
+datasets/vision/deepcrack/
+datasets/vision/crazing_pseudo/
+datasets/auto/

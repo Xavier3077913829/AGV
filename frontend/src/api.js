@@ -55,6 +55,7 @@ export const api = {
   visionOverview: () => request('/vision/overview/'),
   visionSamples: () => request('/vision/samples/'),
   visionCrack: (payload) => postVision('/vision/crack/', payload),
+  visionDefect: (payload) => postVision('/vision/algo/defect/', payload),
   visionDetect: (payload) => postVision('/vision/detect/', payload),
   visionRecords: (query = '') => request(`/vision/records/${query}`).then(unwrap),
   deleteVisionRecord: (id) => request(`/vision/records/${id}/`, { method: 'DELETE' }),
@@ -66,6 +67,7 @@ export const api = {
   equipmentSample: (scenario = 'worn') =>
     request(`/equipment/sample/?scenario=${encodeURIComponent(scenario)}`),
   equipmentModel: () => request('/equipment/model/'),
+  equipmentDatasetCompare: () => request('/equipment/algo/dataset-compare/'),
   equipmentDiagnose: (payload) => postVision('/equipment/diagnose/', payload),
   equipmentRecords: (query = '') => request(`/equipment/records/${query}`).then(unwrap),
   deleteEquipmentRecord: (id) =>
