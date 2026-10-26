@@ -78,7 +78,7 @@
 | 数据库 | MySQL 8.0 |
 | 前端 | Vue 3、Vite、原生 SVG 地图可视化 |
 | 调度算法 | Dijkstra（含路径缓存）、综合成本选车、状态压缩动态规划（<=10 任务精确解）、最近邻 + 2-opt（大规模）、最优插入构造 + 变邻域下降（relocate/swap/or-opt/2-opt）、节点时间窗避碰 |
-| 视觉检测 | OpenCV 4.11（传统算法，无深度学习） |
+| 视觉检测 | OpenCV 4.11（Frangi 传统方法，默认）+ PyTorch 2.2（DeepCrack 监督分割，可选） |
 | 设备监测 | scikit-learn（StandardScaler + RandomForestClassifier） |
 | 需求预测 | statsmodels（Holt-Winters、SARIMA/ARIMA）、pandas、numpy |
 | 接口 | RESTful JSON API |

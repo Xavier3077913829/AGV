@@ -15,6 +15,7 @@ from rest_framework.test import APIClient
 from . import datasets
 from .models import VisionRecord
 from .services import analyze_crack, analyze_workpiece
+from .services_defect import available as defect_available
 from .services_supervised import supervised_available
 
 
@@ -99,6 +100,16 @@ class DatasetAccessTests(TestCase):
         group, name = datasets.split_sample("crack/exp1_num_3191.jpg")
         self.assertEqual(group, "crack")
         self.assertEqual(name, "exp1_num_3191.jpg")
+
+    def test_neu_group_has_samples_and_labels(self):
+        samples = datasets.list_samples(datasets.NEU)
+        self.assertEqual(len(samples), 120)
+        labels = datasets.load_neu_labels()
+        self.assertEqual(set(labels), set(samples))
+        self.assertEqual(
+            {item["class"] for item in labels.values()},
+            {"crazing", "inclusion", "patches", "pitted", "rolled-in", "scratches"},
+        )
 
 
 class VisionApiTests(TestCase):
@@ -212,6 +223,25 @@ class VisionApiTests(TestCase):
         payload = self.client.get("/api/vision/samples/").json()
         for group in datasets.SAMPLE_GROUPS:
             self.assertIn(group, payload["samples"])
+
+    def test_defect_sample_endpoint(self):
+        if not defect_available():
+            self.skipTest("NEU 权重未就绪")
+        samples = datasets.list_samples(datasets.NEU)
+        if not samples:
+            self.skipTest("NEU 样例缺失")
+        name = samples[0]
+        response = self.client.post(
+            "/api/vision/algo/defect/",
+            {"sample": f"neu/{name}"},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("predicted_class", payload)
+        truth = datasets.load_neu_labels()[name]
+        self.assertEqual(payload.get("ground_truth_class"), truth["class"])
+        self.assertIn("match", payload)
 
     def test_sample_image_endpoint(self):
         samples = datasets.list_samples(datasets.CRACK)
