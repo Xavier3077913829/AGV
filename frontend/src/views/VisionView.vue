@@ -36,7 +36,16 @@ const result = ref(null)
 
 const crackAlgorithm = ref('frangi')
 const deepcrackParams = ref({ algorithm: 'deepcrack', threshold: 0.72, min_area: 8, min_coverage: 0.0002, max_side: 512 })
-const frangiParams = ref({ algorithm: 'frangi', score_threshold: 0.54, vessel_threshold: 0.55, min_aspect: 2.5, mask_dilation: 2 })
+const frangiParams = ref({
+  algorithm: 'frangi',
+  score_threshold: 0.54,
+  vessel_threshold: 0.55,
+  min_aspect: 2.5,
+  mask_threshold_ratio: 0.575,
+  mask_close_kernel: 3,
+  mask_skeleton: false,
+  mask_dilation: 3,
+})
 const workpieceParams = ref({ min_area: 300, approx_epsilon: 0.02, morph_kernel: 5 })
 
 const currentMode = computed(() => MODES.find((item) => item.key === mode.value) || MODES[0])
@@ -321,8 +330,23 @@ onUnmounted(() => {
                   <input v-model.number="frangiParams.min_aspect" class="input" type="number" step="0.1" min="1.2" max="8" />
                 </div>
                 <div class="field">
+                  <label>掩码相对阈值 mask_threshold_ratio</label>
+                  <input v-model.number="frangiParams.mask_threshold_ratio" class="input" type="number" step="0.025" min="0" max="1" />
+                </div>
+                <div class="field">
+                  <label>掩码闭运算核 mask_close_kernel</label>
+                  <input v-model.number="frangiParams.mask_close_kernel" class="input" type="number" step="2" min="1" max="15" />
+                </div>
+                <div class="field">
+                  <label>中心线骨架化 mask_skeleton</label>
+                  <select v-model="frangiParams.mask_skeleton" class="input">
+                    <option :value="false">关闭（标定最优）</option>
+                    <option :value="true">开启 Zhang-Suen</option>
+                  </select>
+                </div>
+                <div class="field">
                   <label>掩码膨胀像素 mask_dilation</label>
-                  <input v-model.number="frangiParams.mask_dilation" class="input" type="number" step="1" min="0" max="5" />
+                  <input v-model.number="frangiParams.mask_dilation" class="input" type="number" step="1" min="0" max="8" />
                 </div>
               </template>
               <template v-if="mode === 'defect'">
