@@ -53,7 +53,7 @@ function formatTime(value) {
 
 <template>
   <div>
-    <div class="grid stats-grid order-todo-grid">
+    <div class="grid stats-grid order-summary-grid">
       <button
         v-for="card in orderCards"
         :key="card.label"
@@ -152,7 +152,7 @@ function formatTime(value) {
 </template>
 
 <style scoped>
-.order-todo-grid { margin-bottom: 12px; }
+.order-summary-grid { margin-bottom: 12px; }
 .order-stat-button {
   display: block;
   width: 100%;
