@@ -3,12 +3,14 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from Orders.models import Customer, Order, OrderEvent
+from Operations.models import WorkOrder
 from SchedulingDecision.models import (
     AGV,
     DispatchRecord,
     MapEdge,
     MapNode,
     MapObstacle,
+    ProductionPlan,
     ScheduleRun,
     TransportTask,
 )
@@ -186,6 +188,8 @@ class Command(BaseCommand):
             OrderEvent.objects.all().delete()
             Order.objects.all().delete()
             Customer.objects.all().delete()
+            ProductionPlan.objects.all().delete()
+            WorkOrder.objects.all().delete()
             AGV.objects.all().delete()
             MapEdge.objects.all().delete()
             MapObstacle.objects.all().delete()
@@ -196,6 +200,8 @@ class Command(BaseCommand):
             ScheduleRun.objects.all().delete()
             OrderEvent.objects.all().delete()
             Order.objects.all().delete()
+            ProductionPlan.objects.all().delete()
+            WorkOrder.objects.all().delete()
             AGV.objects.update(status=AGV.Status.IDLE)
 
             required_codes = {

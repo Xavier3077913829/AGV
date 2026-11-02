@@ -1,18 +1,9 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { RouterLink, RouterView, useRoute } from 'vue-router'
 import { api } from './api'
-import DashboardView from './views/DashboardView.vue'
-import DispatchView from './views/DispatchView.vue'
-import AgvView from './views/AgvView.vue'
-import TaskView from './views/TaskView.vue'
-import MapView from './views/MapView.vue'
-import VisionView from './views/VisionView.vue'
-import EquipmentView from './views/EquipmentView.vue'
-import ForecastView from './views/ForecastView.vue'
-import OrdersView from './views/OrdersView.vue'
-import PortalView from './views/PortalView.vue'
 
-const activeTab = ref('dashboard')
+const route = useRoute()
 const loading = ref(true)
 const refreshing = ref(false)
 const online = ref(false)
@@ -25,49 +16,59 @@ const orderFocusStatus = ref('')
 const toast = ref(null)
 let pollTimer = null
 let toastTimer = null
+const liveRoutes = new Set(['dispatch', 'tasks', 'map', 'agvs'])
 
-const navGroups = [
+const navigation = [
   {
-    label: '工作台',
-    tabs: [
-      { key: 'dashboard', label: '调度总览', icon: '◫', subtitle: '运行指标、订单待办、车队状态与最近调度记录' },
+    label: '运营',
+    items: [
+      { path: '/dashboard', label: '生产总览', icon: '⌂' },
+      { path: '/work-orders', label: '生产工单', icon: '▤' },
+      { path: '/alerts', label: '告警中心', icon: '◉' },
     ],
   },
   {
-    label: '订单',
-    tabs: [
-      { key: 'orders', label: '订单管理', icon: '▤', subtitle: '客户下单、订单状态、运输任务和业务时间轴' },
-      { key: 'portal', label: '客户查询', icon: '⌕', subtitle: '匿名客户凭订单号和手机尾号查询脱敏运输进度' },
+    label: '客户订单',
+    items: [
+      { path: '/orders', label: '订单管理', icon: '▤' },
+      { path: '/portal', label: '客户查询', icon: '⌕' },
     ],
   },
   {
-    label: '执行',
-    tabs: [
-      { key: 'dispatch', label: '调度中心', icon: '⌁', subtitle: '单台智能调度与多台 AGV 协同调度' },
-      { key: 'map', label: '地图监控', icon: '◎', subtitle: '仓库拓扑、AGV 位置与实时规划路线' },
-      { key: 'tasks', label: '运输任务', icon: '◇', subtitle: '任务全生命周期与执行状态管理' },
-      { key: 'agvs', label: 'AGV 管理', icon: '▣', subtitle: '车辆状态、电量、载重和位置管理' },
+    label: '生产执行',
+    items: [
+      { path: '/dispatch', label: '调度中心', icon: '⌁' },
+      { path: '/tasks', label: '运输任务', icon: '◇' },
+      { path: '/map', label: '地图监控', icon: '◎' },
+      { path: '/plans', label: '生产计划', icon: '▥' },
     ],
   },
   {
-    label: '质量',
-    tabs: [
-      { key: 'vision', label: '物件质量检测', icon: '◍', subtitle: 'AGV 取料前拍照质检、六类缺陷识别、红框定位与历史追溯' },
-      { key: 'equipment', label: '设备监测', icon: '◈', subtitle: '多变量传感器状态分类、磨损识别与规则告警' },
+    label: '资源与质量',
+    items: [
+      { path: '/agvs', label: 'AGV 管理', icon: '▣' },
+      { path: '/equipment', label: '设备监测', icon: '◈' },
+      { path: '/vision', label: '物件质量检测', icon: '◍' },
     ],
   },
   {
-    label: '分析',
-    tabs: [
-      { key: 'forecast', label: '需求预测', icon: '◒', subtitle: '订单需求时间序列回测与未来预测' },
+    label: '计划与系统',
+    items: [
+      { path: '/forecast', label: '订单预测', icon: '◒' },
+      { path: '/master-data', label: '主数据管理', icon: '▦' },
     ],
   },
 ]
 
-const tabs = navGroups.flatMap((group) => group.tabs)
-const currentTab = computed(() => tabs.find((item) => item.key === activeTab.value) || tabs[0])
-const currentTitle = computed(() => currentTab.value.label)
-const currentSubtitle = computed(() => currentTab.value.subtitle)
+const currentTitle = computed(() => route.meta.title || '运营平台')
+const currentSubtitle = computed(() => route.meta.subtitle || '')
+const sharedProps = computed(() => {
+  if (route.name === 'dispatch') return { tasks: tasks.value, agvs: agvs.value, nodes: mapData.value.nodes || [] }
+  if (route.name === 'map') return { mapData: mapData.value }
+  if (route.name === 'tasks') return { tasks: tasks.value, nodes: mapData.value.nodes || [] }
+  if (route.name === 'agvs') return { agvs: agvs.value }
+  return {}
+})
 
 function showToast(message, type = 'success') {
   toast.value = { message, type }
@@ -100,20 +101,19 @@ function handleNotify(payload) {
   showToast(payload.message, payload.type || 'success')
 }
 
-function selectTab(key) {
-  orderFocusStatus.value = ''
-  activeTab.value = key
-}
-
-function openOrders(status = '') {
-  orderFocusStatus.value = status
-  activeTab.value = 'orders'
+function configurePolling() {
+  clearInterval(pollTimer)
+  pollTimer = null
+  if (!liveRoutes.has(route.name)) return
+  pollTimer = setInterval(() => loadAll(true), 8000)
 }
 
 onMounted(() => {
   loadAll()
-  pollTimer = setInterval(() => loadAll(true), 8000)
+  configurePolling()
 })
+
+watch(() => route.name, configurePolling)
 
 onUnmounted(() => {
   clearInterval(pollTimer)
@@ -126,25 +126,19 @@ onUnmounted(() => {
     <aside class="sidebar">
       <div class="brand">
         <div class="brand-mark">AGV</div>
-        <div><div class="brand-title">智能调度中心</div><div class="brand-subtitle">Fleet Orchestration Platform</div></div>
+        <div><div class="brand-title">制造运营中心</div><div class="brand-subtitle">Intelligent Operations Platform</div></div>
       </div>
       <nav class="sidebar-nav">
-        <div v-for="group in navGroups" :key="group.label" class="nav-group">
+        <div v-for="group in navigation" :key="group.label" class="nav-group">
           <div class="nav-label">{{ group.label }}</div>
-          <button
-            v-for="tab in group.tabs"
-            :key="tab.key"
-            class="nav-item"
-            :class="{ active: activeTab === tab.key }"
-            @click="selectTab(tab.key)"
-          >
-            <span class="nav-icon">{{ tab.icon }}</span><span>{{ tab.label }}</span>
-          </button>
+          <RouterLink v-for="item in group.items" :key="item.path" :to="item.path" class="nav-item">
+            <span class="nav-icon">{{ item.icon }}</span><span>{{ item.label }}</span>
+          </RouterLink>
         </div>
       </nav>
       <div class="sidebar-foot">
-        <strong><span class="connection-dot" :class="{ error: !online }"></span> {{ online ? '调度服务在线' : '后端连接异常' }}</strong>
-        <span>每 8 秒自动同步<br>Django REST API · MySQL</span>
+        <strong><span class="connection-dot" :class="{ error: !online }"></span> {{ online ? '运营服务在线' : '后端连接异常' }}</strong>
+        <span>统一业务事件 · 请求追踪<br>Django REST API · Vue Router</span>
       </div>
     </aside>
 
@@ -153,20 +147,13 @@ onUnmounted(() => {
         <div><div class="page-title">{{ currentTitle }}</div><div class="page-subtitle">{{ currentSubtitle }}</div></div>
         <div class="top-actions">
           <span class="muted small">{{ refreshing ? '正在同步...' : '数据已同步' }}</span>
-          <button class="btn" :disabled="refreshing" @click="loadAll()">刷新数据</button>
+          <button class="btn" :disabled="refreshing" @click="loadAll()">刷新共享数据</button>
         </div>
       </header>
 
-      <DashboardView v-if="activeTab === 'dashboard'" :overview="overview" :agvs="agvs" :tasks="tasks" :dispatches="dispatches" @select-tab="openOrders" />
-      <OrdersView v-else-if="activeTab === 'orders'" :initial-status="orderFocusStatus" @refresh="loadAll(true)" @notify="handleNotify" />
-      <PortalView v-else-if="activeTab === 'portal'" @notify="handleNotify" />
-      <DispatchView v-else-if="activeTab === 'dispatch'" :tasks="tasks" :agvs="agvs" :nodes="mapData.nodes || []" @refresh="loadAll(true)" @notify="handleNotify" />
-      <MapView v-else-if="activeTab === 'map'" :map-data="mapData" @notify="handleNotify" />
-      <TaskView v-else-if="activeTab === 'tasks'" :tasks="tasks" :nodes="mapData.nodes || []" @refresh="loadAll(true)" @notify="handleNotify" />
-      <AgvView v-else-if="activeTab === 'agvs'" :agvs="agvs" @refresh="loadAll(true)" @notify="handleNotify" />
-      <VisionView v-else-if="activeTab === 'vision'" @notify="handleNotify" />
-      <EquipmentView v-else-if="activeTab === 'equipment'" @notify="handleNotify" />
-      <ForecastView v-else @notify="handleNotify" />
+      <RouterView v-slot="{ Component }">
+        <component :is="Component" v-bind="sharedProps" @refresh="loadAll(true)" @notify="handleNotify" />
+      </RouterView>
     </main>
 
     <div v-if="loading" class="loading-shade"><div class="spinner"></div></div>

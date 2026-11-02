@@ -193,10 +193,17 @@ class DefectClassifyView(APIView):
     def post(self, request):
         import time
 
-        from .views import _resolve_input, _save_record
+        from .views import (
+            _apply_quality_link,
+            _resolve_input,
+            _resolve_quality_result,
+            _resolve_work_order,
+            _save_record,
+        )
 
         try:
             image, source, name = _resolve_input(request)
+            work_order = _resolve_work_order(request)
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -249,6 +256,12 @@ class DefectClassifyView(APIView):
             "width": int(image.shape[1]),
             "height": int(image.shape[0]),
         })
+        try:
+            quality_result = _resolve_quality_result(
+                request, fallback="fail" if work_order else "not_assessed"
+            )
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         annotated = annotate_defect(
             image,
             verdict=verdict,
@@ -294,11 +307,17 @@ class DefectClassifyView(APIView):
                 },
             },
             objects,
+            work_order=work_order,
+            quality_result=quality_result,
         )
+        _apply_quality_link(request, record, quality_result)
         result.update({
             "record_id": record.id,
             "image_url": record.result_image.url,
             "input_image_url": record.input_image.url,
+            "work_order_id": work_order.id if work_order else None,
+            "work_order_no": work_order.order_no if work_order else "",
+            "quality_result": quality_result,
         })
         if str(source) == "dataset" and str(name).startswith("neu/"):
             truth = datasets.load_neu_labels().get(os.path.basename(str(name)))
