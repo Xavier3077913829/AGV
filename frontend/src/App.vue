@@ -9,6 +9,8 @@ import MapView from './views/MapView.vue'
 import VisionView from './views/VisionView.vue'
 import EquipmentView from './views/EquipmentView.vue'
 import ForecastView from './views/ForecastView.vue'
+import OrdersView from './views/OrdersView.vue'
+import PortalView from './views/PortalView.vue'
 
 const activeTab = ref('dashboard')
 const loading = ref(true)
@@ -19,21 +21,50 @@ const mapData = ref({ nodes: [], edges: [], agvs: [], active_routes: [] })
 const agvs = ref([])
 const tasks = ref([])
 const dispatches = ref([])
+const orderFocusStatus = ref('')
 const toast = ref(null)
 let pollTimer = null
 let toastTimer = null
 
-const tabs = [
-  { key: 'dashboard', label: '调度总览', icon: '◫', subtitle: '运行指标、车队状态与最近调度记录' },
-  { key: 'dispatch', label: '调度中心', icon: '⌁', subtitle: '单台智能调度与多台 AGV 协同调度' },
-  { key: 'map', label: '地图监控', icon: '◎', subtitle: '仓库拓扑、AGV 位置与实时规划路线' },
-  { key: 'tasks', label: '运输任务', icon: '◇', subtitle: '任务全生命周期与执行状态管理' },
-  { key: 'agvs', label: 'AGV 管理', icon: '▣', subtitle: '车辆状态、电量、载重和位置管理' },
-  { key: 'vision', label: '视觉检测', icon: '◍', subtitle: '裂纹检测、缺陷分类与工件识别（OpenCV + PyTorch）' },
-  { key: 'equipment', label: '设备监测', icon: '◈', subtitle: '多变量传感器状态分类、磨损识别与规则告警' },
-  { key: 'forecast', label: '订单预测', icon: '◒', subtitle: '订单需求时间序列回测与未来预测' },
+const navGroups = [
+  {
+    label: '工作台',
+    tabs: [
+      { key: 'dashboard', label: '调度总览', icon: '◫', subtitle: '运行指标、订单待办、车队状态与最近调度记录' },
+    ],
+  },
+  {
+    label: '订单',
+    tabs: [
+      { key: 'orders', label: '订单管理', icon: '▤', subtitle: '客户下单、订单状态、运输任务和业务时间轴' },
+      { key: 'portal', label: '客户查询', icon: '⌕', subtitle: '匿名客户凭订单号和手机尾号查询脱敏运输进度' },
+    ],
+  },
+  {
+    label: '执行',
+    tabs: [
+      { key: 'dispatch', label: '调度中心', icon: '⌁', subtitle: '单台智能调度与多台 AGV 协同调度' },
+      { key: 'map', label: '地图监控', icon: '◎', subtitle: '仓库拓扑、AGV 位置与实时规划路线' },
+      { key: 'tasks', label: '运输任务', icon: '◇', subtitle: '任务全生命周期与执行状态管理' },
+      { key: 'agvs', label: 'AGV 管理', icon: '▣', subtitle: '车辆状态、电量、载重和位置管理' },
+    ],
+  },
+  {
+    label: '质量',
+    tabs: [
+      { key: 'vision', label: '物件质量检测', icon: '◍', subtitle: 'AGV 取料前拍照质检、六类缺陷识别、红框定位与历史追溯' },
+      { key: 'equipment', label: '设备监测', icon: '◈', subtitle: '多变量传感器状态分类、磨损识别与规则告警' },
+    ],
+  },
+  {
+    label: '分析',
+    tabs: [
+      { key: 'forecast', label: '需求预测', icon: '◒', subtitle: '订单需求时间序列回测与未来预测' },
+    ],
+  },
 ]
 
+const tabs = navGroups.flatMap((group) => group.tabs)
 const currentTab = computed(() => tabs.find((item) => item.key === activeTab.value) || tabs[0])
 const currentTitle = computed(() => currentTab.value.label)
 const currentSubtitle = computed(() => currentTab.value.subtitle)
@@ -69,6 +100,16 @@ function handleNotify(payload) {
   showToast(payload.message, payload.type || 'success')
 }
 
+function selectTab(key) {
+  orderFocusStatus.value = ''
+  activeTab.value = key
+}
+
+function openOrders(status = '') {
+  orderFocusStatus.value = status
+  activeTab.value = 'orders'
+}
+
 onMounted(() => {
   loadAll()
   pollTimer = setInterval(() => loadAll(true), 8000)
@@ -87,10 +128,20 @@ onUnmounted(() => {
         <div class="brand-mark">AGV</div>
         <div><div class="brand-title">智能调度中心</div><div class="brand-subtitle">Fleet Orchestration Platform</div></div>
       </div>
-      <div class="nav-label">工作台</div>
-      <button v-for="tab in tabs" :key="tab.key" class="nav-item" :class="{ active: activeTab === tab.key }" @click="activeTab = tab.key">
-        <span class="nav-icon">{{ tab.icon }}</span><span>{{ tab.label }}</span>
-      </button>
+      <nav class="sidebar-nav">
+        <div v-for="group in navGroups" :key="group.label" class="nav-group">
+          <div class="nav-label">{{ group.label }}</div>
+          <button
+            v-for="tab in group.tabs"
+            :key="tab.key"
+            class="nav-item"
+            :class="{ active: activeTab === tab.key }"
+            @click="selectTab(tab.key)"
+          >
+            <span class="nav-icon">{{ tab.icon }}</span><span>{{ tab.label }}</span>
+          </button>
+        </div>
+      </nav>
       <div class="sidebar-foot">
         <strong><span class="connection-dot" :class="{ error: !online }"></span> {{ online ? '调度服务在线' : '后端连接异常' }}</strong>
         <span>每 8 秒自动同步<br>Django REST API · MySQL</span>
@@ -106,7 +157,9 @@ onUnmounted(() => {
         </div>
       </header>
 
-      <DashboardView v-if="activeTab === 'dashboard'" :overview="overview" :agvs="agvs" :tasks="tasks" :dispatches="dispatches" />
+      <DashboardView v-if="activeTab === 'dashboard'" :overview="overview" :agvs="agvs" :tasks="tasks" :dispatches="dispatches" @select-tab="openOrders" />
+      <OrdersView v-else-if="activeTab === 'orders'" :initial-status="orderFocusStatus" @refresh="loadAll(true)" @notify="handleNotify" />
+      <PortalView v-else-if="activeTab === 'portal'" @notify="handleNotify" />
       <DispatchView v-else-if="activeTab === 'dispatch'" :tasks="tasks" :agvs="agvs" :nodes="mapData.nodes || []" @refresh="loadAll(true)" @notify="handleNotify" />
       <MapView v-else-if="activeTab === 'map'" :map-data="mapData" @notify="handleNotify" />
       <TaskView v-else-if="activeTab === 'tasks'" :tasks="tasks" :nodes="mapData.nodes || []" @refresh="loadAll(true)" @notify="handleNotify" />

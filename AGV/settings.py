@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "corsheaders",
     "SchedulingDecision",
+    "Orders",
     "ManufacturingVision",
     "EquipmentMonitoring",
     "DemandForecast",
@@ -147,4 +148,7 @@ REST_FRAMEWORK = {
         "rest_framework.filters.SearchFilter",
         "rest_framework.filters.OrderingFilter",
     ],
+    "DEFAULT_THROTTLE_RATES": {
+        "order_lookup": "20/min",
+    },
 }

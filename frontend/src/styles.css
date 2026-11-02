@@ -109,6 +109,14 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .brand-title { color: #f4fbf9; font-size: 16px; font-weight: 800; letter-spacing: 0.025em; }
 .brand-subtitle { color: #91abb0; font-size: 10px; line-height: 1.45; margin-top: 4px; letter-spacing: 0.03em; }
 .nav-label { padding: 10px 11px 9px; color: #738f95; font-size: 10px; letter-spacing: 0.15em; }
+.sidebar-nav {
+  max-height: calc(100vh - 218px);
+  padding-bottom: 8px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.nav-group + .nav-group { margin-top: 4px; }
+.nav-group .nav-label:first-child { padding-top: 12px; }
 .nav-item {
   position: relative;
   width: 100%;
@@ -634,6 +642,7 @@ tr:hover td { background: #f8fbfa; }
   .sidebar { width: 82px; padding-inline: 13px; }
   .brand { justify-content: center; padding-inline: 0; }
   .brand > div:last-child, .nav-label, .nav-item > span:last-child, .sidebar-foot span { display: none; }
+  .sidebar-nav { max-height: calc(100vh - 158px); }
   .nav-item { justify-content: center; padding-inline: 0; }
   .nav-item.active::before { top: 8px; bottom: 8px; }
   .sidebar-foot { left: 13px; right: 13px; display: grid; place-items: center; padding: 12px 6px; }
@@ -668,7 +677,9 @@ tr:hover td { background: #f8fbfa; }
   .brand > div:last-child { display: block; }
   .brand-mark { width: 38px; height: 38px; }
   .nav-label { display: none; }
-  .sidebar nav { display: flex; gap: 7px; overflow-x: auto; }
+  .sidebar nav { display: flex; gap: 7px; max-height: none; overflow-x: auto; }
+  .sidebar .nav-group { display: flex; gap: 7px; }
+  .sidebar .nav-group + .nav-group { margin-top: 0; }
   .nav-item { width: auto; flex: 0 0 auto; min-width: 44px; margin: 0; padding: 9px; }
   .nav-item > span:last-child { display: inline; font-size: 11px; white-space: nowrap; }
   .sidebar-foot { display: none; }

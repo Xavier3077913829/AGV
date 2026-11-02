@@ -65,6 +65,8 @@ class TransportTaskSerializer(serializers.ModelSerializer):
     pickup_node_detail = MapNodeSerializer(source="pickup_node", read_only=True)
     dropoff_node_detail = MapNodeSerializer(source="dropoff_node", read_only=True)
     assigned_agv_detail = AGVSerializer(source="assigned_agv", read_only=True)
+    order_id = serializers.IntegerField(read_only=True, allow_null=True)
+    order_no = serializers.CharField(source="order.order_no", read_only=True, allow_null=True)
 
     class Meta:
         model = TransportTask
@@ -74,12 +76,12 @@ class TransportTaskSerializer(serializers.ModelSerializer):
             "priority_display", "status", "status_display", "assigned_agv",
             "assigned_agv_detail", "schedule_run", "sequence_number", "planned_wait_seconds", "optimization_details", "route", "total_distance", "estimated_duration",
             "scheduled_start", "scheduled_end", "started_at", "completed_at",
-            "notes", "created_at", "updated_at",
+            "notes", "order_id", "order_no", "created_at", "updated_at",
         ]
         read_only_fields = [
             "status", "assigned_agv", "schedule_run", "sequence_number", "planned_wait_seconds", "optimization_details", "route", "total_distance", "estimated_duration",
             "scheduled_start", "scheduled_end", "started_at", "completed_at",
-            "created_at", "updated_at",
+            "order_id", "order_no", "created_at", "updated_at",
         ]
         extra_kwargs = {"task_no": {"required": False, "allow_blank": True}}
 

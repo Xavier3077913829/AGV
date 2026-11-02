@@ -27,8 +27,15 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from . import datasets
+from .models import VisionRecord
 from .services_supervised import segment_crack, status as deepcrack_status
 from .services_defect import classify_defect, status as defect_status
+from .services_defect_localization import (
+    REJECTION_LABEL,
+    annotate_defect,
+    locate_defect,
+    rejection_decision,
+)
 from .services_algo import (
     anomalib_available,
     build_dataset_from_project,
@@ -186,7 +193,7 @@ class DefectClassifyView(APIView):
     def post(self, request):
         import time
 
-        from .views import _resolve_input
+        from .views import _resolve_input, _save_record
 
         try:
             image, source, name = _resolve_input(request)
@@ -203,11 +210,95 @@ class DefectClassifyView(APIView):
             return Response({"detail": f"{type(exc).__name__}: {exc}"},
                             status=status.HTTP_400_BAD_REQUEST)
 
+        gate = rejection_decision(result)
+        boxes = []
+        objects = []
+        localization = None
+        if gate["uncertain"]:
+            verdict = "uncertain"
+            predicted_class = None
+            predicted_label = REJECTION_LABEL
+        else:
+            verdict = "defect"
+            predicted_class = gate["raw_predicted_class"]
+            predicted_label = gate["raw_predicted_label"]
+            localization = locate_defect(
+                image,
+                predicted_class=predicted_class,
+                confidence=float(gate["confidence"]),
+                device=request.data.get("device") or "cpu",
+            )
+            boxes = localization["boxes"]
+            objects = localization["objects"]
+
         result.update({
             "task_type": "defect",
+            "verdict": verdict,
+            "is_uncertain": gate["uncertain"],
+            "predicted_class": predicted_class,
+            "predicted_label": predicted_label,
+            "raw_predicted_class": gate["raw_predicted_class"],
+            "raw_predicted_label": gate["raw_predicted_label"],
+            "confidence": gate["confidence"],
+            "class_margin": gate["margin"],
+            "rejection": gate,
+            "boxes": boxes,
+            "objects": objects,
+            "localization_method": localization["method"] if localization else None,
             "elapsed_ms": round((time.perf_counter() - started) * 1000, 2),
             "width": int(image.shape[1]),
             "height": int(image.shape[0]),
+        })
+        annotated = annotate_defect(
+            image,
+            verdict=verdict,
+            predicted_class=predicted_class,
+            predicted_label=predicted_label,
+            confidence=float(gate["confidence"]),
+            objects=objects,
+        )
+        record = _save_record(
+            VisionRecord.TaskType.DEFECT,
+            source,
+            name,
+            image,
+            annotated,
+            {
+                "result": verdict,
+                "count": len(boxes),
+                "elapsed_ms": result["elapsed_ms"],
+                "params": {
+                    "device": request.data.get("device") or "cpu",
+                    "min_confidence": gate["min_confidence"],
+                    "min_margin": gate["min_margin"],
+                },
+                "width": result["width"],
+                "height": result["height"],
+                "class_counts": {predicted_class: 1} if predicted_class else {},
+                "algorithm": "neu_small_cnn",
+                "record_metrics": {
+                    "predicted_class": predicted_class,
+                    "predicted_label": predicted_label,
+                    "raw_predicted_class": gate["raw_predicted_class"],
+                    "raw_predicted_label": gate["raw_predicted_label"],
+                    "confidence": gate["confidence"],
+                    "class_margin": gate["margin"],
+                    "top3": result.get("top3", []),
+                    "probabilities": result.get("probabilities", {}),
+                    "is_uncertain": gate["uncertain"],
+                    "rejection_reason": gate["reason"],
+                    "localization_method": result["localization_method"],
+                    "box_count": len(boxes),
+                    "tta": result.get("tta", False),
+                    "tta_views": result.get("tta_views", 1),
+                },
+            },
+            objects,
+        )
+        result.update({
+            "record_id": record.id,
+            "image_url": record.result_image.url,
+            "input_image_url": record.input_image.url,
         })
         if str(source) == "dataset" and str(name).startswith("neu/"):
             truth = datasets.load_neu_labels().get(os.path.basename(str(name)))
@@ -215,6 +306,6 @@ class DefectClassifyView(APIView):
                 result.update({
                     "ground_truth_class": truth["class"],
                     "ground_truth_label": truth["label"],
-                    "match": result.get("predicted_class") == truth["class"],
+                    "match": gate["raw_predicted_class"] == truth["class"],
                 })
         return Response(result)
